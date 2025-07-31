@@ -283,23 +283,26 @@ df_aeu_wdl_final <- df_wdl_new %>%
   filter(Analyte == "Dissolved Ammonia" | Analyte == "Dissolved Nitrate + Nitrite" | Analyte == "Dissolved Organic Nitrogen" | Analyte == "Dissolved ortho-Phosphate" | Analyte == "Total Kjeldahl Nitrogen" | Analyte == "Total Phosphorus") %>% #only keep the analytes we want
   select(c("Long Station Name", "Short Station Name", "Station Number", "Date_Time", "Sample Code", "Analyte", "Result", "Rpt Limit", "Units", "Method", "Lab Dup", "Sample Type", "Description", "Notes")) %>% #remove unwanted columns
   add_column(Project = "Yolo Bypass Fish Monitoring Program") %>% #add Project column and have it all say YBFMP
-  filter(!is.na(`Result`)) #get rid of rows with NA in the result column
+  filter(!(is.na(`Result`) | `Result` == "N.S.")) #get rid of rows with NA or NS in the result column
 
-rm(df_wdl_new) #remove intermediate data frames (need to keep was WDL data, df_aeu_wdl, for later)
+rm(df_wdl_new) #remove intermediate data frames (need to keep raw WDL data, df_aeu_wdl, for later)
 ```
 
 ### 6 - WQA
 
 -Import WQA discrete data file
 ```{r}
-df_wqa <- read_csv("WQA Discrete Data.csv")
+fp_wqa <- abs_nutrient_path("WQA Discrete Data.csv")
+df_wqa <- read_csv(fp_wqa)
+
+rm(fp_wqa) #remove file paths
 ```
 
 -Check/format data
 ```{r}
 unique(df_wqa$Matrix) #only shows Water, Natural
 unique(df_wqa$`SampleType`) #only shows Normal Samples
-unique(df_wqa$Analyte) #has dissolved TKN, which has been used by the lab as a check(remove)
+unique(df_wqa$Analyte) #has dissolved TKN, which is typically used by the lab as a check (can remove)
 
 df_wqa_final <- df_wqa %>%
   mutate(Date_Time = mdy_hm(`CollectionDate`)) %>% #format date
@@ -307,7 +310,7 @@ df_wqa_final <- df_wqa %>%
   select(c("LongStationName", "ShortStationName", "StationNumber", "Date_Time", "SampleCode", "Analyte", "Result", "RptLimit", "Units", "Method", "LabDup", "SampleType", "Description", "Notes")) %>% #remove unwanted columns
   rename("Short Station Name" = "ShortStationName", "Long Station Name" = "LongStationName", "Station Number" = "StationNumber", "Sample Code" = "SampleCode", "Rpt Limit" = "RptLimit", "Lab Dup" = "LabDup", "Sample Type" = "SampleType") %>% #rename columns to match other WDL data files
   add_column(Project = "WQA Discrete Sampling and Special Studies") %>% #add Project column
-  filter(!is.na(`Result`)) #get rid of rows with NA in the result column
+  filter(!(is.na(`Result`) | `Result` == "N.S.")) #get rid of rows with NA or NS in the result column
 
 rm(df_wqa) #remove intermediate data frames
 ```
@@ -318,16 +321,18 @@ rm(df_wqa) #remove intermediate data frames
 
 -Import AEU data from EDI
 ```{r}
-df_aeu_edi <- read_csv("AEU Data_EDI.csv")
+#manual import
+#fp_aeu_edi <- abs_nutrient_path("AEU Data_EDI.csv")
+#df_aeu_edi <- read_csv(fp_aeu_edi)
 
-#df_aeu_edi <- get_edi_file(1391, "nutr_wq_clean") #1391 is the EDI package ID, nutr_wq_clean is the file name
+df_aeu_edi <- get_edi_file(1391, "nutr_wq_clean") #1391 is the EDI package ID, nutr_wq_clean is the file name
 ```
 
 -Format columns and pivot (need to switch from wide to long format)
 ```{r}
 
 df_aeu_new <- df_aeu_edi %>% 
-  mutate(Date_Time = mdy_hm(datetime)) %>% #format datetime column
+  mutate(Date_Time = ymd_hms(datetime)) %>% #format datetime column
   mutate(year = year(Date_Time)) %>% #add a year column
   filter(year > 2009) #get rid of anything prior to 2010
 
