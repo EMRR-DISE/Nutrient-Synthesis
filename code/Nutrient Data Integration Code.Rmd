@@ -5,6 +5,7 @@ date: "2025-03-13"
 output: html_document
 ---
 
+##Load Packages
 -Load necessary packages that we will use for this analysis
 ```{r}
 library(tidyverse)
@@ -15,6 +16,7 @@ library(RColorBrewer)
 library(EDIutils)
 ```
 
+##Run Functions
 -Run function to grab EDI data 
 ```{r}
 get_edi_file <- function(pkg_id, fname) {
@@ -52,6 +54,43 @@ get_edi_file <- function(pkg_id, fname) {
 
 ```
 
+-Run function to read in SharePoint files
+```{r}
+abs_nutrient_path <- function(fp_rel = NULL) {
+
+  base_path <- file.path(Sys.getenv('USERPROFILE'), 'California Department of Water Resources', 'Nutrient synthesis - Documents/Data Integration Team/2025 Data Integration Code Files')
+
+  if (is.null(fp_rel)) {
+
+    return(base_path)
+
+  } else {
+
+    return(file.path(base_path, fp_rel))
+
+  }
+
+}
+ 
+```
+
+-Run function to check for coerced NAs
+```{r}
+check_non_numeric <- function(df, col_name) {
+  if (col_name %in% names(df)) {
+    original <- df[[col_name]]
+    converted <- as.numeric(as.character(original))
+    # Find which values became NA
+    na_indices <- which(is.na(converted) & !is.na(original))
+    if (length(na_indices) > 0) {
+      cat('Column:', col_name, '\n')
+      cat('Problematic values:\n')
+      print(unique(original[na_indices]))
+      cat('At rows:', na_indices[1:min(10, length(na_indices))], '\n\n')
+    }
+  }
+}
+```
 
 ## WDL Data
 
@@ -59,8 +98,11 @@ get_edi_file <- function(pkg_id, fname) {
 
 -Import Tidal Parr data
 ```{r}
-df_tp <- read_csv("Tidal Parr_Data_Final.csv") #read in data file
+fp_tp <- abs_nutrient_path("Tidal Parr_Data_Final.csv")
 
+df_tp <- read_csv(fp_tp) #read in data file
+
+rm(fp_tp) #remove file paths
 ```
 
 -Check/Format Data
@@ -74,7 +116,7 @@ df_tp_final <- df_tp %>%
   select(c("Station Number", "Date_Time", "Sample Code", "Analyte", "Result", "Rpt Limit", "Units", "Method", "Lab Dup", "Sample Type", "Description", "Notes")) %>% #remove unwanted columns
   add_column(Project = "Tidal Parr Study") %>% #add Project column and have it all say Tidal Parr
   add_column("Long Station Name" = NA, "Short Station Name" = NA) %>% #data file doesn't have station names
-  filter(!is.na(`Result`)) #get rid of rows with NA in the result column
+  filter(!(is.na(`Result`) | `Result` == "N.S.")) #get rid of rows with NA or NS in the result column
 
 rm(df_tp) #remove intermediate data frames
 ```
@@ -83,13 +125,25 @@ rm(df_tp) #remove intermediate data frames
 
 -Import O&M data (multiple files)
 ```{r}
-df_aq1 <- read_csv("O&M Data_CA Aquaduct Grab Sample_1.csv")
-df_aq2 <- read_csv("O&M Data_CA Aquaduct Grab Sample_2.csv")
-df_aq3 <- read_csv("O&M Data_CA Aquaduct Grab Sample_3.csv")
-df_nba <- read_csv("O&M Data_NBA Grab Sample.csv")
-df_ofd <- read_csv("O&M Data_OFD Grab Sample.csv")
-df_sba <- read_csv("O&M Data_SBA Grab Sample.csv")
+fp_aq1 <- abs_nutrient_path("O&M Data_CA Aquaduct Grab Sample_1.csv")
+df_aq1 <- read_csv(fp_aq1)
 
+fp_aq2 <- abs_nutrient_path("O&M Data_CA Aquaduct Grab Sample_2.csv")
+df_aq2 <- read_csv(fp_aq2)
+
+fp_aq3 <- abs_nutrient_path("O&M Data_CA Aquaduct Grab Sample_3.csv")
+df_aq3 <- read_csv(fp_aq3)
+
+fp_nba <- abs_nutrient_path("O&M Data_NBA Grab Sample.csv")
+df_nba <- read_csv(fp_nba)
+
+fp_ofd <- abs_nutrient_path("O&M Data_OFD Grab Sample.csv")
+df_ofd <- read_csv(fp_ofd)
+
+fp_sba <- abs_nutrient_path("O&M Data_SBA Grab Sample.csv")
+df_sba <- read_csv(fp_sba)
+
+rm(fp_aq1, fp_aq2, fp_aq3, fp_nba, fp_ofd, fp_sba) #remove file paths
 ```
 
 -Combine data files
@@ -112,7 +166,7 @@ df_om_final <- df_om_new %>%
   mutate(Date_Time = mdy_hm(`Collection Date`)) %>% #format date
   select(c("Long Station Name", "Short Station Name", "Station Number", "Date_Time", "Sample Code", "Analyte", "Result", "Rpt Limit", "Units", "Method", "Lab Dup", "Sample Type", "Description", "Notes")) %>% #remove unwanted columns
   add_column(Project = "SWP Routine Monitoring") %>% #add Project column and have it all say SWP Routine Monitoring
-  filter(!is.na(`Result`)) #get rid of rows with NA in the result column
+  filter(!(is.na(`Result`) | `Result` == "N.S.")) #get rid of rows with NA or NS in the result column
 
 rm(df_om, df_om_new) #remove intermediate data frames
 ```
@@ -121,7 +175,10 @@ rm(df_om, df_om_new) #remove intermediate data frames
 
 -Import NDFS data
 ```{r}
-df_ndfs <- read_csv("NDFS Data.csv")
+fp_ndfs <- abs_nutrient_path("NDFS Data.csv")
+df_ndfs <- read_csv(fp_ndfs)
+
+rm(fp_ndfs) #remove file paths
 ```
 
 -Check/Format data
@@ -134,7 +191,7 @@ df_dise_ndfs_final <- df_ndfs %>%
   mutate(Date_Time = mdy_hm(`Collection Date`)) %>% #format date
   select(c("Long Station Name", "Short Station Name", "Station Number", "Date_Time", "Sample Code", "Analyte", "Result", "Rpt Limit", "Units", "Method", "Lab Dup", "Sample Type", "Description", "Notes")) %>% #remove unwanted rows
   add_column(Project = "DISE NDFS Study") %>% #add Project column and have it all say NDFS Study
-  filter(!is.na(`Result`)) #get rid of rows with NA in the result column
+  filter(!(is.na(`Result`) | `Result` == "N.S.")) #get rid of rows with NA or NS in the result column
 
 rm(df_ndfs) #remove intermediate data frames
 ```
@@ -143,7 +200,10 @@ rm(df_ndfs) #remove intermediate data frames
 
 -Import NCRO data (all projects combined into one file)
 ```{r}
-df_ncro <- read_csv("NCRO Data.csv")
+fp_ncro <- abs_nutrient_path("NCRO Data.csv")
+df_ncro <- read_csv(fp_ncro)
+
+rm(fp_ncro) #remove file paths
 ```
 
 -Add project names
@@ -187,7 +247,7 @@ df_ncro_final <- df_ncro_new %>%
   mutate(Date_Time = mdy_hm(`Collection Date`)) %>% #format date
   filter(Analyte == "Dissolved Ammonia" | Analyte == "Dissolved Nitrate + Nitrite"| Analyte == "Dissolved Organic Nitrogen"| Analyte == "Dissolved ortho-Phosphate" | Analyte == "Dissolved Nitrate" | Analyte == "Total Phosphorus" | Analyte == "Total Kjeldahl Nitrogen") %>% #filter for the analytes we want
   select(c("Long Station Name", "Short Station Name", "Station Number", "Date_Time", "Sample Code", "Analyte", "Result", "Rpt Limit", "Units", "Method", "Lab Dup", "Sample Type", "Description", "Notes", Project)) %>% #remove unwanted rows
-  filter(!is.na(`Result`))  #remove rows with no results
+  filter(!(is.na(`Result`) | `Result` == "N.S.")) #get rid of rows with NA or NS in the result column
 
 rm(df_ncro, df_ndfs, df_ncro_new, df_sdtb, df_rs, df_edb)
 ```
@@ -196,7 +256,10 @@ rm(df_ncro, df_ndfs, df_ncro_new, df_sdtb, df_rs, df_edb)
 
 -Import AEU data (from WDL)
 ```{r}
-df_aeu_wdl <- read_csv("AEU Data_WDL.csv")
+fp_aeu_wdl <- abs_nutrient_path("AEU Data_WDL.csv")
+df_aeu_wdl <- read_csv(fp_aeu_wdl)
+
+rm(fp_aeu_wdl) #remove file paths
 ```
 
 -Filter for the years we want (AEU's EDI data only goes through 2021, so we need to get the 2022-2024 data from WDL)
@@ -423,7 +486,7 @@ rm(df_aeu_station_numbers)
 df_sample_codes <- df_aeu_wdl %>%
   select(c("Station Number", "Sample Code", "Collection Date", "Analyte")) %>% #only keep the columns we need
   mutate(Date_Time = mdy_hm(`Collection Date`)) %>% #format date
-  select(-`Collection Date`)
+  select(-`Collection Date`) #remove old date time column
 
 df_sample_codes <- distinct(df_sample_codes) #get rid of repeated rows
 
@@ -479,8 +542,13 @@ rm(df_aeu_comb, df_aeu_wdl, df_aeu_edi) #remove intermediate data frames
 
 -Import DEMP data and LSZ station lat/longs
 ```{r}
-df_demp <- read_csv("DEMP Data.csv")
-df_latlong <- read_csv("DEMP_LSZ_LatLong.csv")
+fp_demp <- abs_nutrient_path("DEMP Data.csv")
+df_demp <- read_csv(fp_demp)
+
+fp_latlong <- abs_nutrient_path("DEMP_LSZ_LatLong.csv")
+df_latlong <- read_csv(fp_latlong)
+
+rm(fp_demp, fp_latlong) #remove file paths
 ```
 
 -Check data
@@ -570,7 +638,9 @@ rm(df_demp_methods, df_demp_new, df_TA, df_Bryte) #remove intermediate data fram
 
 -Import FRP data
 ```{r}
-#df_frp <- read_csv("FRP Data.csv")
+#manual import
+#fp_frp <- abs_nutrient_path("FRP Data.csv")
+#df_frp <- read_csv(fp_frp)
 
 df_frp <- get_edi_file(269, "nutrients_FRP2023") #269 is the EDI package ID, nutrients_FRP2023 is the file name
 ```
@@ -600,7 +670,7 @@ df_frp_methods <- left_join(df_frp_nutrients, df_methods, by = 'Analyte')
 
 -Format/filter data
 ```{r}
-df_frp_new<- df_frp_methods %>%
+df_frp_new <- df_frp_methods %>%
   mutate(Date = ymd(Date)) %>% #format the date column
   unite(col = "Date_Time", Date, StartTime, sep = " ", na.rm=TRUE) #combine date time columns, remove any times that were NA
 
@@ -619,7 +689,7 @@ df_frp_final <- df_frp_new %>%
   add_column(Project = "Fish Restoration Program") %>% #add Project column and have it all say FRP
   filter(!(`Result` == "N.S.")) #get rid of "Not Sampled" rows
 
-#still need to add Latitude, Longitude (add those to the list of columns kept above)
+#missing Latitude, Longitude, so would need to add those to the list of columns kept above if adding in later
 #missing lab dups and description column, so should probably combine the FRP data after lab dups have been filtered out of WDL data
 
 rm(df_frp, df_frp_new, df_frp_methods, df_frp_nutrients)
@@ -629,7 +699,7 @@ rm(df_frp, df_frp_new, df_frp_methods, df_frp_nutrients)
 
 ### Combine WDL Data
 
--Combine data sets from WDL (O&M, Tidal Parr, DISE-NDFS, NCRO, WQA)
+-Combine data sets from WDL (O&M, Tidal Parr, DISE-NDFS, NCRO, WQA, AEU-WDL)
 ```{r}
 df_nutrients_WDL <- bind_rows(df_om_final, df_tp_final, df_dise_ndfs_final, df_ncro_final, df_aeu_wdl_final, df_wqa_final) #combine WDL data sets
 
@@ -758,6 +828,13 @@ df_nutrients_WDL <- df_nutrients_WDL %>%
 
 ### Add AEU Data (Non-WDL)
 
+-Check which values would be converted to NA
+```{r}
+check_non_numeric(df_nutrients_WDL, 'Result')
+
+check_non_numeric(df_aeu_edi_final, 'Result')
+```
+
 -Adding now since there were no lab/field dups, or blanks, the method names were clean, and the non-detects were already fixed 
 ```{r}
 names(df_aeu_edi_final) %in% names(df_nutrients_WDL)
@@ -779,7 +856,8 @@ rm(df_aeu_edi_final, df_nutrients_WDL)
 
 -Use the master station list (duplicate stations removed) to add the lat/longs
 ```{r}
-df_stations_discrete <- read_csv("Discrete_Stations_Consolidated.csv")
+fp_stations_discrete <- abs_nutrient_path("Discrete_Stations_Consolidated.csv")
+df_stations_discrete <- read_csv(fp_stations_discrete)
 
 df_stations_discrete <- df_stations_discrete %>%
   select(c(Station_Name, Latitude, Longitude, `Station Number`)) #remove unwanted columns
@@ -801,6 +879,7 @@ df_nutrients_comb <- df_nutrients_comb %>%
   select(-c(`Long Station Name`, `Short Station Name`)) #get rid of WDL station name columns
 
 rm(df_frp, df_no_frp, df_no_frp_latlong) #remove intermediate data frames
+rm(fp_stations_discrete) #remove file paths
 ```
 
 
@@ -1031,10 +1110,10 @@ plot(quick_plot)
 ### Export as csv file
 
 ```{r}
-write_csv(df_nutrients_clean, "C:/Users/mbattey/OneDrive - California Department of Water Resources/My Documents/Water Quality Science & Synthesis/Nutrient Synthesis Project/Data/nutrient_data_discrete.csv")
-```
+fp_output_discrete <- abs_nutrient_path("../EDI Data Files/nutrient_data_discrete.csv")
 
--need to fix the way the time is showing up when saving as a csv (can potentially change it to character, make sure to check for changes to dates though)
+write_csv(df_nutrients_clean, fp_output_discrete)
+```
 
 
 ## Continuous Nutrient Data
@@ -1043,8 +1122,13 @@ write_csv(df_nutrients_clean, "C:/Users/mbattey/OneDrive - California Department
 
 -Import CEMP SUNA data
 ```{r}
-df_cemp_hood <- read_csv("SRH_SUNA_data.csv") #read in Hood data
-df_cemp_vern <- read_csv("SJR_SUNA_data.csv") #read in Vernalis data
+fp_cemp_hood <- abs_nutrient_path("SRH_SUNA_data.csv")
+df_cemp_hood <- read_csv(fp_cemp_hood) #read in Hood data
+
+fp_cemp_vern <- abs_nutrient_path("SJR_SUNA_data.csv")
+df_cemp_vern <- read_csv(fp_cemp_vern) #read in Vernalis data
+
+rm(fp_cemp_hood, fp_cemp_vern) #remove file paths
 ```
 
 -Add station names
@@ -1074,10 +1158,19 @@ rm(df_cemp_vern, df_cemp_hood)
 
 -Import WQA RTDF data
 ```{r}
-df_rtdf_banks <- read_csv("RTDF_Banks_NO3.csv") #read in Banks data
-df_rtdf_gia <- read_csv("RTDF_Gianelli_NO3.csv") #read in Gianelli data
-df_rtdf_jones <- read_csv("RTDF_Jones_NO3.csv") #read in Jones data
-df_rtdf_vern <- read_csv("RTDF_Vernalis_NO3.csv") #read in Vernalis data
+fp_rtdf_banks <- abs_nutrient_path("RTDF_Banks_NO3.csv")
+df_rtdf_banks <- read_csv(fp_rtdf_banks) #read in Banks data
+
+fp_rtdf_gia <- abs_nutrient_path("RTDF_Gianelli_NO3.csv")
+df_rtdf_gia <- read_csv(fp_rtdf_gia) #read in Gianelli data
+
+fp_rtdf_jones <- abs_nutrient_path("RTDF_Jones_NO3.csv")
+df_rtdf_jones <- read_csv(fp_rtdf_jones) #read in Jones data
+
+fp_rtdf_vern <- abs_nutrient_path("RTDF_Vernalis_NO3.csv")
+df_rtdf_vern <- read_csv(fp_rtdf_vern) #read in Vernalis data
+
+rm(fp_rtdf_banks, fp_rtdf_gia, fp_rtdf_jones, fp_rtdf_vern) #remove file paths
 ```
 
 -Add station names
@@ -1100,7 +1193,6 @@ df_rtdf_vern <- df_rtdf_vern %>%
 ```{r}
 df_wqa_rtdf <- bind_rows(df_rtdf_banks, df_rtdf_gia, df_rtdf_jones, df_rtdf_vern)
 
-
 df_wqa_rtdf <- df_wqa_rtdf %>%
   mutate(Date_Time = parse_date_time(`Datetime`, orders = c("mdY HM", "mdY"))) %>% #format date, include both formats since some times missing
   add_column(Project = "WQA Real-Time Data and Forecasting") %>% #add project column
@@ -1118,7 +1210,7 @@ df_continuous_all <- bind_rows(df_cemp_suna, df_wqa_rtdf)
 
 df_continuous_final <- df_continuous_all %>%
   filter(!(is.na(Result))) %>% #remove NA results (need to confirm whether there's a way to determine if any are NDs)
-  select(c(Project, Station_Name, Date, Date_Time, Result)) #reorder columns
+  select(c(Project, Station_Name, Date_Time, Result)) #reorder columns
 
 rm(df_cemp_suna, df_wqa_rtdf, df_continuous_all)
 ```
@@ -1156,6 +1248,9 @@ plot(quick_plot)
 
 ### Export as csv file
 ```{r}
-write_csv(df_continuous_final, "C:/Users/mbattey/OneDrive - California Department of Water Resources/My Documents/Water Quality Science & Synthesis/Nutrient Synthesis Project/Data/nutrient_data_continuous.csv")
+fp_output_continuous <- abs_nutrient_path("../EDI Data Files/nutrient_data_continuous.csv")
+
+write_csv(df_continuous_clean, fp_output_continuous)
+
 ```
 
