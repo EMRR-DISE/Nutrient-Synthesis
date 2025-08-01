@@ -1270,18 +1270,20 @@ plot(quick_plot)
 
 ```
 
-### Round values
+### Check duplicate Station/Date/Time/Analyte
+
 ```{r}
-# TODO: check that this is valid rounding; use case_when if certain nutrients have more sig figs, or if its dif for dif programs
-df_nutrients_clean <- df_nutrients_clean %>% mutate(Result = round(Result, 2),
-                              Reporting_Limit = round(Reporting_Limit, 2))
+# TODO: true duplicates, can remove
+df_dups <- df_nutrients_clean %>%
+  filter(duplicated(.))
+
+df_nutrients_clean <- df_nutrients_clean %>%
+  distinct()
 ```
 
 
-### Check duplicate Station/Date/Time/Analyte
 ```{r}
-# TODO: are these real?
-
+# TODO: key duplicates; are these real?
 df_nutrients_clean %>%
   count(Station_Name, Date_Time, Analyte) %>%
   filter(n > 1)
@@ -1296,6 +1298,12 @@ df_nutrients_clean %>%
   filter(n > 1)
 ```
 
+### Round values
+```{r}
+# TODO: check that this is valid rounding; use case_when if certain nutrients have more sig figs, or if its dif for dif programs
+df_nutrients_clean <- df_nutrients_clean %>% mutate(Result = round(Result, 2),
+                              Reporting_Limit = round(Reporting_Limit, 2))
+```
 
 ### Export as csv file
 
@@ -1447,9 +1455,16 @@ plot(quick_plot)
 ```
 
 ### Check duplicate Station/Date/Time/Analyte
-```{r}
-# TODO: are these real?
 
+```{r}
+# none are fully duplicates
+df_continuous_clean %>%
+  filter(duplicated(.))
+```
+
+
+```{r}
+# TODO: some have duplicate "keys"; are these real?
 df_continuous_clean %>%
   count(Station_Name, Date_Time) %>%
   filter(n > 1)
