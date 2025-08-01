@@ -1270,6 +1270,13 @@ plot(quick_plot)
 
 ```
 
+### Round values
+```{r}
+# TODO: check that this is valid rounding; use case_when if certain nutrients have more sig figs, or if its dif for dif programs
+df_nutrients_clean <- df_nutrients_clean %>% mutate(Result = round(Result, 2),
+                              Reporting_Limit = round(Reporting_Limit, 2))
+```
+
 ### Export as csv file
 
 ```{r}
@@ -1408,6 +1415,16 @@ quick_plot <- ggplot(df_continuous_clean, aes(x = Date_Time, y = Result, color= 
 plot(quick_plot)
 ```
 
+### Round values
+
+```{r}
+# TODO: check that this is valid rounding; use case_when if certain nutrients have more sig figs, or if its dif for dif programs
+
+# I didn't run it because I know this is dif for dif continuous ones.
+
+# df_continuous_clean <- df_continuous_clean %>% mutate(Result = round(Result, 2),
+#                               Reporting_Limit = round(Reporting_Limit, 2))
+```
 
 ### Export as csv file
 ```{r}
