@@ -1277,12 +1277,32 @@ df_nutrients_clean <- df_nutrients_clean %>% mutate(Result = round(Result, 2),
                               Reporting_Limit = round(Reporting_Limit, 2))
 ```
 
+
+### Check duplicate Station/Date/Time/Analyte
+```{r}
+# TODO: are these real?
+
+df_nutrients_clean %>%
+  count(Station_Name, Date_Time, Analyte) %>%
+  filter(n > 1)
+```
+
+
+```{r}
+# TODO: this one (without time) has slightly more matches; are they real?
+df_nutrients_clean %>%
+  mutate(Date = as.Date(Date_Time)) %>%
+  count(Station_Name, Date, Analyte) %>%
+  filter(n > 1)
+```
+
+
 ### Export as csv file
 
 ```{r}
 fp_output_discrete <- abs_nutrient_path("../EDI Data Files/nutrient_data_discrete.csv")
 
-write_csv(df_nutrients_clean, fp_output_discrete)
+# write_csv(df_nutrients_clean, fp_output_discrete)
 ```
 
 
@@ -1426,11 +1446,20 @@ plot(quick_plot)
 #                               Reporting_Limit = round(Reporting_Limit, 2))
 ```
 
+### Check duplicate Station/Date/Time/Analyte
+```{r}
+# TODO: are these real?
+
+df_continuous_clean %>%
+  count(Station_Name, Date_Time) %>%
+  filter(n > 1)
+```
+
 ### Export as csv file
 ```{r}
-fp_output_continuous <- abs_nutrient_path("../EDI Data Files/nutrient_data_continuous.csv")
+# fp_output_continuous <- abs_nutrient_path("../EDI Data Files/nutrient_data_continuous.csv")
 
-write_csv(df_continuous_clean, fp_output_continuous)
+# write_csv(df_continuous_clean, fp_output_continuous)
 
 ```
 
