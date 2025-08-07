@@ -112,14 +112,17 @@ df_tp <- read_csv(fp_tp) #read in data file
 ```{r}
 unique(df_tp$Matrix) #only shows Water, Natural
 #but also has NA's... why? 
+
 foo = filter(df_tp, is.na(Matrix))
-View(foo)
+# View(foo)
 #looks like a few blanks and random lines with stuff we don't want. 
 #filtering to remove rows with NA's for results (below) should fix this. 
 
 unique(df_tp$`Sample Type`) #only shows Normal Samples
 unique(df_tp$`Lab Dup`) #but there are still lab duplicates in there, which is confusing. Maybe filter those out?
 unique(df_tp$`Analyte`) #no other analytes present besides what we want 
+
+#Morgan's response to Lab Dup question: Sample Type column only indicates normal, field dups, and blanks (does not indicate lab dups), everything except normal samples gets filtered out later, including lab dups 
 
 df_tp_final <- df_tp %>%
   mutate(Date_Time = mdy_hm(`Collection Date`)) %>% #format date
@@ -136,10 +139,13 @@ unique(df_tp_final$`Analyte`)
 
 rm(df_tp) #remove intermediate data frames
 ```
+
 - Check DateTimes
 ```{r}
 # any missing dates?
 df_tp_final %>% filter(is.na(Date_Time))
+
+#getting an error on the line above
 
 # any missing times?
 df_tp_final %>%
@@ -216,7 +222,7 @@ rm(df_om, df_om_new) #remove intermediate data frames
 - Check DateTimes
 ```{r}
 # any missing dates?
-df_om_final %>% filter(is.na(Date_Time))
+df_om_final %>% dplyr::filter(is.na(Date_Time))
 
 # any missing times?
 df_om_final %>%
@@ -288,7 +294,7 @@ df_ncro <- df_ncro %>% filter(!(is.na(df_ncro$`Long Station Name`) | is.na(df_nc
 
 #project 1 - south delta temporary barriers
 df_sdtb <- df_ncro %>%
-  filter(`Long Station Name` == "Doughty Cut near Grantline Canal" | `Long Station Name` == "Grant Line Canal near Old River" | `Long Station Name` == "Grant Line Canal East" | `Long Station Name` == "Middle River at Howard Road" | `Long Station Name` == "Middle River at Undine Road" | `Long Station Name` == "Middle River near Tracy Road" | `Long Station Name` == "Old River above DMC Barrier" | `Long Station Name` == "Old River near Head" | `Long Station Name` == "Old River Upstream of Mountain House Creek" | `Long Station Name` == "Old River near Doughty Cut - ORX" | `Long Station Name` == "Paradise Cut Upstream" | `Long Station Name` == "Sugar Cut downstream of Tom Paine Slough" | `Long Station Name` == "Old River at Tracy Wildlife Association" | `Long Station Name` == "Victoria Canal near Byron" | `Long Station Name` == "Tom Paine Slough above Intake" | `Long Station Name` == "Grant Ln Can @ Tracy Rd Bdg" | `Long Station Name` == "Grantline Canal above Dam") %>% #filter for the SDTB stations
+  filter(`Long Station Name` == "Doughty Cut near Grantline Canal" | `Long Station Name` == "Grant Line Canal near Old River" | `Long Station Name` == "Grant Line Canal East" | `Long Station Name` == "Middle River at Howard Road" | `Long Station Name` == "Middle River at Undine Road" | `Long Station Name` == "Middle River near Tracy Road" | `Long Station Name` == "Old River above DMC Barrier" | `Long Station Name` == "Old River near Head" | `Long Station Name` == "Old River Upstream of Mountain House Creek" | `Long Station Name` == "Old River near Doughty Cut - ORX" | `Long Station Name` == "Paradise Cut Upstream" | `Long Station Name` == "Sugar Cut downstream of Tom Paine Slough" | `Long Station Name` == "Old River at Tracy Wildlife Association" | `Long Station Name` == "Victoria Canal near Byron" | `Long Station Name` == "Tom Paine Slough above Intake" | `Long Station Name` == "Grant Ln Can @ Tracy Rd Bdg" | `Long Station Name` == "Grantline Canal above Dam" | `Long Station Name` == "Middle R @ Tracy Rd Bdg" | `Long Station Name` == "Middle River @ Union Point - P10A" | `Long Station Name` == "Old River Downstream DMC Barrier") %>% #filter for the SDTB stations
   add_column(Project = "South Delta Temporary Barriers Project") #add Project column and have it all say SDTB
 
 #project 2 - emergency drought barrier 
@@ -320,6 +326,7 @@ setdiff(df_ncro$`Long Station Name`, df_ncro_new$`Long Station Name`)
 setdiff(df_ncro$`Short Station Name`, df_ncro_new$`Short Station Name`)
 
 # TODO: should these be included in the dataset?
+#Morgan: Yes, I missed those. Added them in above to the sdtb data frame
 
 # Perry tip: usually better to use case_when in mutate than to break up in multiple dataframes, as it's easier to tell when data is excluded/formatted incorrectly. Can you "%in%" so you don't have to write out the column name each time, eg:
 # df_test %>% mutate(Column = case_when(
@@ -438,23 +445,24 @@ df_aeu_edi <- get_edi_file(1391, "nutr_wq_clean") #1391 is the EDI package ID, n
 ```{r}
 
 df_aeu_new <- df_aeu_edi %>% 
-  mutate(Date_Time = ymd_hms(datetime)) %>% #format datetime column
+  mutate(Date_Time = parse_date_time(`datetime`, orders = c("Ymd HMS", "Ymd"))) %>% #format date, include both formats since some times missing
   mutate(year = year(Date_Time)) %>% #add a year column
   filter(year > 2009) #get rid of anything prior to 2010
 
 #six date times failed to parse.
-df_aeu_test <- df_aeu_edi %>% 
-  mutate(Date_Time = ymd_hms(datetime)) %>%
-  filter(is.na(Date_Time))
+# df_aeu_test <- df_aeu_edi %>% 
+#   mutate(Date_Time = ymd_hms(datetime)) %>%
+#   filter(is.na(Date_Time))
 #looks like just a few ones that didn't have time recorded, Date still looks good.
 #So use date for Date_Time in those cases.
+#Morgan: updated the mutate date line above to account for the 6 rows that didn't have times
 
-df_aeu_new <- df_aeu_edi %>% 
-  mutate(Date_Time = ymd_hms(datetime),  #format datetime column
-         Date_Time = case_when(is.na(Date_Time) ~ sample_date,
-                               TRUE ~ Date_Time),
-  year = year(Date_Time)) %>% #add a year column
-  filter(year > 2009) #get rid of anything prior to 2010
+# df_aeu_new <- df_aeu_edi %>% 
+#   mutate(Date_Time = ymd_hms(datetime),  #format datetime column
+#          Date_Time = case_when(is.na(Date_Time) ~ sample_date,
+#                                TRUE ~ Date_Time),
+#   year = year(Date_Time)) %>% #add a year column
+#   filter(year > 2009) #get rid of anything prior to 2010
 
 unique(df_aeu_new$year) #confirm the data has only the years we want (lab data only goes through 2021)
 
@@ -601,6 +609,7 @@ df_aeu_comb <- left_join(df_aeu_comb, df_methods, by = "Analyte") #use left join
 
 # double check no NAs
 df_aeu_comb %>% filter(is.na('Method'))
+#getting an error message for the above line
 ```
 
 -Add WDL station numbers to data (need this to get lat/longs added later)
@@ -1277,25 +1286,31 @@ plot(quick_plot)
 df_dups <- df_nutrients_clean %>%
   filter(duplicated(.))
 
-df_nutrients_clean <- df_nutrients_clean %>%
-  distinct()
+# df_nutrients_clean <- df_nutrients_clean %>%
+#   distinct()
+
+unique(df_dups$Project)
 ```
 
 
 ```{r}
 # TODO: key duplicates; are these real?
-df_nutrients_clean %>%
-  count(Station_Name, Date_Time, Analyte) %>%
+df_dups1 <- df_nutrients_clean %>%
+  count(Project, Station_Name, Date_Time, Analyte) %>%
   filter(n > 1)
+
+unique(df_dups1$Project)
 ```
 
 
 ```{r}
 # TODO: this one (without time) has slightly more matches; are they real?
-df_nutrients_clean %>%
+df_dups2 <- df_nutrients_clean %>%
   mutate(Date = as.Date(Date_Time)) %>%
-  count(Station_Name, Date, Analyte) %>%
+  count(Project, Station_Name, Date, Analyte) %>%
   filter(n > 1)
+
+unique(df_dups2$Project)
 ```
 
 ### Round values
