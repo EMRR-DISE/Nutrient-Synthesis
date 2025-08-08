@@ -137,7 +137,7 @@ unique(df_tp_final$`Sample Type`)
 unique(df_tp_final$`Lab Dup`)
 unique(df_tp_final$`Analyte`)
 
-rm(df_tp) #remove intermediate data frames
+rm(df_tp, foo) #remove intermediate data frames
 ```
 
 - Check DateTimes
@@ -1349,6 +1349,8 @@ df_dups3 <- df_nutrients_clean %>%
   filter(n > 1)
 
 unique(df_dups3$Project) #same four projects
+
+rm(df_dups1, df_dups2, df_dups3)
 ```
 
 ### Round values
@@ -1363,7 +1365,7 @@ df_nutrients_clean <- df_nutrients_clean %>% mutate(Result = round(Result, 2),
 ```{r}
 fp_output_discrete <- abs_nutrient_path("../EDI Data Files/nutrient_data_discrete.csv")
 
-write_csv(df_nutrients_clean, fp_output_discrete)
+# write_csv(df_nutrients_clean, fp_output_discrete)
 ```
 
 
@@ -1460,7 +1462,7 @@ rm(df_rtdf_banks, df_rtdf_gia, df_rtdf_jones, df_rtdf_vern)
 df_continuous_all <- bind_rows(df_cemp_suna, df_wqa_rtdf)
 
 df_continuous_final <- df_continuous_all %>%
-  filter(!(is.na(Result))) %>% #remove NA results (need to confirm whether there's a way to determine if any are NDs)
+  filter(!(is.na(Result))) %>% #remove NA results (confirmed this is missing data, not non-detect data)
   select(c(Project, Station_Name, Date_Time, Result)) #reorder columns
 
 rm(df_cemp_suna, df_wqa_rtdf, df_continuous_all)
@@ -1518,9 +1520,21 @@ df_continuous_clean %>%
 
 ```{r}
 # TODO: some have duplicate "keys"; are these real?
-df_continuous_clean %>%
+dup_check1 <- df_continuous_clean %>%
   count(Station_Name, Date_Time) %>%
   filter(n > 1)
+
+unique(dup_check1$Station_Name)
+
+#only station that has dups is C10A, which is present in both the CEMP SUNA data and the WQA RTDF data - could just be overlap between projects
+
+dup_check2 <- df_continuous_clean %>%
+  count(Project, Station_Name, Date_Time) %>%
+  filter(n > 1)
+
+#confirmed, was just overlap between the two projects (no dups when project is included)
+
+rm(dup_check1, dup_check2)
 ```
 
 ### Export as csv file
