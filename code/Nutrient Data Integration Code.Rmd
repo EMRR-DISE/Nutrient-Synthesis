@@ -341,8 +341,15 @@ unique(df_ncro_new$Matrix) #only shows Water, Natural
 unique(df_ncro_new$`Sample Type`) #shows Normal Samples, Replicate Samples, and Duplicate Samples
 unique(df_ncro_new$`Analyte`) #includes the analytes we want, plus dissolved nitrate (keep) and dissolved TKN (remove), and includes field data
 
+
 df_ncro_final <- df_ncro_new %>%
-  mutate(Date_Time = mdy_hm(`Collection Date`)) %>% #format date
+  mutate(Date_Time = mdy_hm(`Collection Date`)) #format date
+
+range(df_ncro_final$Date_Time) #dates are from 1999-2024, need to remove everything before 2010
+
+df_ncro_final <- df_ncro_final %>% 
+  mutate(year = year(Date_Time)) %>% #create a year column
+  filter(year > 2009) %>% #remove everything before 2010
   filter(Analyte == "Dissolved Ammonia" | Analyte == "Dissolved Nitrate + Nitrite"| Analyte == "Dissolved Organic Nitrogen"| Analyte == "Dissolved ortho-Phosphate" | Analyte == "Dissolved Nitrate" | Analyte == "Total Phosphorus" | Analyte == "Total Kjeldahl Nitrogen") %>% #filter for the analytes we want
   select(c("Long Station Name", "Short Station Name", "Station Number", "Date_Time", "Sample Code", "Analyte", "Result", "Rpt Limit", "Units", "Method", "Lab Dup", "Sample Type", "Description", "Notes", Project)) %>% #remove unwanted rows
   filter(!(is.na(`Result`) | `Result` == "N.S.")) #get rid of rows with NA or NS in the result column
@@ -782,7 +789,7 @@ df_demp_final <- df_demp_final %>%
   select(-c(`Lab: MDL`, `EA_Reports To`)) %>% #remove columns that are no longer needed
   rename(Description = "Lab: Comment", Notes = "Field: Comment") #rename columns to match WDL data
 
-#rm(df_demp_methods, df_demp_new, df_TA, df_Bryte) #remove intermediate data frames
+rm(df_demp_methods, df_demp_new, df_TA, df_Bryte) #remove intermediate data frames
 ```
 
 ### 3 - FRP
@@ -1025,6 +1032,24 @@ df_stations_discrete <- read_csv(fp_stations_discrete)
 df_stations_discrete <- df_stations_discrete %>%
   select(c(Station_Name, Latitude, Longitude, `Station Number`)) #remove unwanted columns
 
+#Checks
+df_name_check <- df_stations_discrete %>%
+  count(Station_Name) %>%
+  filter(n > 1) #Lindsey Slough is the only duplicated station name, one is from FRP, which doesn't have a lat/long associated with it
+
+df_gps_check <- df_stations_discrete %>%
+  count(Latitude, Longitude) %>%
+  filter(n > 1) #found two stations with lat/long of 38.24285, -121.6836
+
+df_station_dup <- df_stations_discrete %>%
+  filter(Latitude == 38.24285 & Longitude == -121.6836) 
+#stations with the same GPS coords are South Tip of Liberty Island (WQA) and Liberty at S End (DISE NDFS), which have different station numbers
+
+df_number_check <- df_stations_discrete %>%
+  count(`Station Number`) %>%
+  filter(n > 1) #no duplicated station numbers (just NAs)
+
+#Add lat/longs
 df_frp <- df_nutrients_comb %>%
   filter(is.na(`Station Number`)) %>% #need to first separate FRP data since there are no station numbers to match
   rename(Station_Name = "Short Station Name")
@@ -1041,7 +1066,7 @@ df_nutrients_comb <- bind_rows(df_no_frp_latlong, df_frp) #add FRP data back in
 df_nutrients_comb <- df_nutrients_comb %>%
   select(-c(`Long Station Name`, `Short Station Name`)) #get rid of WDL station name columns
 
-rm(df_frp, df_no_frp, df_no_frp_latlong) #remove intermediate data frames
+rm(df_frp, df_no_frp, df_no_frp_latlong, df_station_dup, df_gps_check, df_name_check, df_number_check) #remove intermediate data frames
 rm(fp_stations_discrete) #remove file paths
 ```
 
@@ -1062,7 +1087,7 @@ names(df_demp_final) %in% names(df_nutrients_comb) #confirm they have the same c
 df_demp_final <- df_demp_final %>%
   mutate_at('Result', as.numeric)  #convert DEMP result column to numeric
 
-#When you converted Longitude to numeric NA's happened, so this is to figture out why
+#When you converted Longitude to numeric NA's happened, so this is to figure out why
 df_nutrients_combx <- df_nutrients_comb %>%
   mutate(Lat1 = as.numeric(Latitude)) %>% #convert latitude column to numeric
   mutate(Long1 = as.numeric(Longitude)) %>% #convert longitude column to numeric
@@ -1080,7 +1105,7 @@ df_nutrients_comb <- bind_rows(df_nutrients_comb, df_demp_final)
 
 unique(df_nutrients_comb$Project) #confirm all projects are included
 
-#rm(df_demp_final, df_station_numbers, df_stations_discrete)
+rm(df_demp_final, df_station_numbers, df_stations_discrete, df_nutrients_combx)
 ```
 
 
@@ -1279,6 +1304,7 @@ plot(quick_plot)
 
 ```
 
+
 ### Check duplicate Station/Date/Time/Analyte
 
 ```{r}
@@ -1286,10 +1312,13 @@ plot(quick_plot)
 df_dups <- df_nutrients_clean %>%
   filter(duplicated(.))
 
-# df_nutrients_clean <- df_nutrients_clean %>%
-#   distinct()
+#remove all duplicated rows
+df_nutrients_clean <- df_nutrients_clean %>%
+  distinct()
 
 unique(df_dups$Project)
+
+rm(df_dups)
 ```
 
 
@@ -1299,18 +1328,27 @@ df_dups1 <- df_nutrients_clean %>%
   count(Project, Station_Name, Date_Time, Analyte) %>%
   filter(n > 1)
 
-unique(df_dups1$Project)
+unique(df_dups1$Project)#FRP, SWP, NCRO-SDTB, WQA, n=2-6
+
+#Morgan: I would think some of these are real, since we can't assume each project only collected one of each sample/analyte per sampling event. It may be helpful to add sample code in there, since that's what FLIMS uses to distinguish "different" samples.
+
+#check with sample code
+df_dups2 <- df_nutrients_clean %>%
+  count(Project, Station_Name, Date_Time, Analyte, Sample_Code) %>%
+  filter(n > 1)
+
+unique(df_dups2$Project) #same four projects as above, but n=2 for all 
 ```
 
 
 ```{r}
 # TODO: this one (without time) has slightly more matches; are they real?
-df_dups2 <- df_nutrients_clean %>%
+df_dups3 <- df_nutrients_clean %>%
   mutate(Date = as.Date(Date_Time)) %>%
   count(Project, Station_Name, Date, Analyte) %>%
   filter(n > 1)
 
-unique(df_dups2$Project)
+unique(df_dups3$Project) #same four projects
 ```
 
 ### Round values
@@ -1325,7 +1363,7 @@ df_nutrients_clean <- df_nutrients_clean %>% mutate(Result = round(Result, 2),
 ```{r}
 fp_output_discrete <- abs_nutrient_path("../EDI Data Files/nutrient_data_discrete.csv")
 
-# write_csv(df_nutrients_clean, fp_output_discrete)
+write_csv(df_nutrients_clean, fp_output_discrete)
 ```
 
 
