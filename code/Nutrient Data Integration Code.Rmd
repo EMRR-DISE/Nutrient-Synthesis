@@ -143,13 +143,17 @@ rm(df_tp, foo) #remove intermediate data frames
 - Check DateTimes
 ```{r}
 # any missing dates?
-df_tp_final %>% filter(is.na(Date_Time))
+df_date_test <- df_tp_final %>% filter(is.na(Date_Time))
 
 #getting an error on the line above
 
 # any missing times?
-df_tp_final %>%
+df_time_test <- df_tp_final %>%
   filter(format(Date_Time, '%H:%M:%S') == '00:00:00')
+
+#no missing date times
+
+rm(df_date_test, df_time_test)
 ```
 
 
@@ -222,15 +226,18 @@ rm(df_om, df_om_new) #remove intermediate data frames
 - Check DateTimes
 ```{r}
 # any missing dates?
-df_om_final %>% dplyr::filter(is.na(Date_Time))
+df_date_test <- df_om_final %>% filter(is.na(Date_Time))
 
 # any missing times?
-df_om_final %>%
+df_time_test <- df_om_final %>%
   filter(format(Date_Time, '%H:%M:%S') == '00:00:00') %>%
   distinct(`Date_Time`,`Sample Code`)
 
 # a few missing times
 # TODO: follow up? or is it fine?
+#Morgan: I think it's probably fine for discrete
+
+rm(df_date_test, df_time_test)
 ```
 
 ### 3 - NDFS (DISE)
@@ -262,12 +269,14 @@ rm(df_ndfs) #remove intermediate data frames
 - Check DateTimes
 ```{r}
 # any missing dates?
-df_dise_ndfs_final %>% filter(is.na(Date_Time))
+df_date_test <- df_dise_ndfs_final %>% filter(is.na(Date_Time))
 
 # any missing times?
-df_dise_ndfs_final %>%
+df_time_test <- df_dise_ndfs_final %>%
   filter(format(Date_Time, '%H:%M:%S') == '00:00:00') %>%
   distinct(`Date_Time`,`Sample Code`)
+
+rm(df_date_test, df_time_test)
 ```
 
 ### 4 - NCRO
@@ -286,7 +295,7 @@ unique(df_ncro$`Short Station Name`)
 unique(df_ncro$`Long Station Name`)
 
 # only NA is junk data; filter out
-df_ncro %>% filter(is.na(df_ncro$`Long Station Name`) | is.na(df_ncro$`Short Station Name`))
+df_NA_test <- df_ncro %>% filter(is.na(df_ncro$`Long Station Name`) | is.na(df_ncro$`Short Station Name`))
 
 df_ncro <- df_ncro %>% filter(!(is.na(df_ncro$`Long Station Name`) | is.na(df_ncro$`Short Station Name`))) # two fewer, as expected
 
@@ -318,7 +327,7 @@ df_ncro_new <- bind_rows(df_sdtb, df_edb, df_rs, df_ndfs)
 
 - Double check all stations were assigned correctly
 ```{r}
-# differing number of rows; ncro_new missing about 30 rows
+# differing number of rows; ncro_new missing about 30 rows - fixed!
 nrow(df_ncro_new) == nrow(df_ncro)
 
 # same 3 missing
@@ -357,18 +366,20 @@ df_ncro_final <- df_ncro_final %>%
 # check this filtered correctly
 unique(df_ncro_final$Analyte)
 
-rm(df_ncro, df_ndfs, df_ncro_new, df_sdtb, df_rs, df_edb)
+rm(df_ncro, df_ndfs, df_ncro_new, df_sdtb, df_rs, df_edb, df_NA_test)
 ```
 
 - Check DateTimes
 ```{r}
 # any missing dates?
-df_ncro_final %>% filter(is.na(Date_Time))
+df_date_test <- df_ncro_final %>% filter(is.na(Date_Time))
 
 # any missing times?
-df_ncro_final %>%
+df_time_test <- df_ncro_final %>%
   filter(format(Date_Time, '%H:%M:%S') == '00:00:00') %>%
   distinct(`Date_Time`,`Sample Code`)
+
+rm(df_date_test, df_time_test)
 ```
 
 ### 5 - AEU (WDL)
@@ -413,7 +424,7 @@ rm(df_wdl_new) #remove intermediate data frames (need to keep raw WDL data, df_a
 ```{r}
 fp_wqa <- abs_nutrient_path("WQA Discrete Data.csv")
 df_wqa <- read_csv(fp_wqa, guess_max = 20000)
-problems(df_wqa)
+#problems(df_wqa)
 
 rm(fp_wqa) #remove file paths
 ```
@@ -615,8 +626,8 @@ df_methods <- data.frame(Analyte = c("Dissolved Ammonia", "Dissolved Nitrate + N
 df_aeu_comb <- left_join(df_aeu_comb, df_methods, by = "Analyte") #use left join to add methods to EDI data based on Analyte
 
 # double check no NAs
-df_aeu_comb %>% filter(is.na('Method'))
-#getting an error message for the above line
+df_NA_test <- df_aeu_comb %>% filter(is.na('Method'))
+
 ```
 
 -Add WDL station numbers to data (need this to get lat/longs added later)
@@ -631,10 +642,10 @@ df_aeu_comb <- left_join(df_aeu_comb, df_aeu_station_numbers, by = "Station_Name
 df_aeu_comb <- df_aeu_comb %>%
   rename("Station Number" = Station_Number) #rename the station number column to match the WDL data
 
-rm(df_aeu_station_numbers)
-
 # double check no NAs
-df_aeu_comb %>% filter(is.na('Station Number'))
+df_NA_test <- df_aeu_comb %>% filter(is.na('Station Number'))
+
+rm(df_aeu_station_numbers, df_NA_test)
 ```
 
 -Add sample codes from WDL data
@@ -810,7 +821,7 @@ unique(df_frp$`SampleType`) #normal samples, blank samples, replicate/duplicate 
 
 #analysis method column is not present, will need to add those in
 #some collection times are missing
-#some rows are missing station names
+#some rows are missing station names - remove these
 #missing lat/longs - need to get these from CDFW
 #will need to combine date and time columns
 ```
@@ -820,6 +831,12 @@ unique(df_frp$`SampleType`) #normal samples, blank samples, replicate/duplicate 
 df_frp_nutrients <- df_frp %>%
   filter(Analyte == "Dissolved Ammonia" | Analyte == "Dissolved Nitrate + Nitrite" | Analyte == "Dissolved Organic Nitrogen" | Analyte == "Dissolved ortho-Phosphate" | Analyte == "Total Kjeldahl Nitrogen" | Analyte == "Total Phosphorus")  %>% #only keep the analytes we want
   filter(SampleType == 'Normal Sample') # filter out QA samples
+
+#check rows with missing stations - 45 rows that will need to be removed
+df_NA_test <- df_frp_nutrients %>% filter(is.na(Location))
+
+df_frp_nutrients <- df_frp_nutrients %>%
+  filter(!is.na(Location))
 
 df_frp_methods <- left_join(df_frp_nutrients, df_methods, by = 'Analyte')
 
@@ -851,16 +868,16 @@ df_frp_final <- df_frp_new %>%
 #missing lab dups and description column, so should probably combine the FRP data after lab dups have been filtered out of WDL data
 
 # check no NA Date_Time
-df_frp_final %>% filter(is.na(Date_Time))
+df_date_test <- df_frp_final %>% filter(is.na(Date_Time))
 
 # any missing times?
-df_frp_final %>%
+df_time_test <- df_frp_final %>%
   filter(format(Date_Time, '%H:%M:%S') == '00:00:00') %>%
   distinct(`Date_Time`,`Sample Code`)
 
 # TODO: quite a few, but fine?
 
-rm(df_frp, df_frp_new, df_frp_methods, df_frp_nutrients)
+rm(df_frp, df_frp_new, df_frp_methods, df_frp_nutrients, df_date_test, df_time_test)
 ```
 
 ## Data Integration and Formatting
@@ -1352,12 +1369,33 @@ unique(df_dups3$Project) #same four projects
 
 rm(df_dups1, df_dups2, df_dups3)
 ```
+-Remove additional lab dups (Lab Dup column only identifies lab dups going back to Dec 2012)
+```{r}
+# Define grouping variables for each unique duplicate pair
+grp_lab_dups <- c("Project", "Station_Name", "Date_Time", "Analyte", "Sample_Code")
+
+# Pull out lab dups and select one at random
+df_data_lab_dups <- df_nutrients_clean %>%
+  add_count(pick(all_of(grp_lab_dups))) %>%
+  filter(n > 1) %>%
+  select(-n) %>%
+  slice_sample(n = 1, by = all_of(grp_lab_dups))
+
+# Add back the cleaned up lab dup data to the main data frame
+df_nutrients_clean <- df_nutrients_clean %>%
+  anti_join(
+    df_data_lab_dups %>% select(all_of(grp_lab_dups)),
+    by = grp_lab_dups
+  ) %>%
+  bind_rows(df_data_lab_dups)
+```
+
 
 ### Round values
 ```{r}
 # TODO: check that this is valid rounding; use case_when if certain nutrients have more sig figs, or if its dif for dif programs
-df_nutrients_clean <- df_nutrients_clean %>% mutate(Result = round(Result, 2),
-                              Reporting_Limit = round(Reporting_Limit, 2))
+#df_nutrients_clean <- df_nutrients_clean %>% mutate(Result = round(Result, 2),
+                              #Reporting_Limit = round(Reporting_Limit, 2))
 ```
 
 ### Export as csv file
@@ -1365,7 +1403,7 @@ df_nutrients_clean <- df_nutrients_clean %>% mutate(Result = round(Result, 2),
 ```{r}
 fp_output_discrete <- abs_nutrient_path("../EDI Data Files/nutrient_data_discrete.csv")
 
-# write_csv(df_nutrients_clean, fp_output_discrete)
+#write_csv(df_nutrients_clean, fp_output_discrete)
 ```
 
 
@@ -1513,8 +1551,10 @@ plot(quick_plot)
 
 ```{r}
 # none are fully duplicates
-df_continuous_clean %>%
+df_dup_test <- df_continuous_clean %>%
   filter(duplicated(.))
+
+rm(df_dup_test)
 ```
 
 
