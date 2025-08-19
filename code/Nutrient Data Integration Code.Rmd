@@ -220,7 +220,7 @@ unique(df_om_final$`Sample Type`)
 unique(df_om_final$Analyte) 
 unique(df_om_final$`Lab Dup`)
 
-rm(df_om, df_om_new) #remove intermediate data frames
+rm(df_om, df_om_new, foo) #remove intermediate data frames
 ```
 
 - Check DateTimes
@@ -266,6 +266,18 @@ df_dise_ndfs_final <- df_ndfs %>%
 
 rm(df_ndfs) #remove intermediate data frames
 ```
+-Update Liberty Island station
+```{r}
+unique(df_dise_ndfs_final$`Short Station Name`)
+unique(df_dise_ndfs_final$`Station Number`)
+
+#DISE NDFS and WQA have the same coordinates but slightly different names for South Tip at Liberty Island - use WQA's station name and number
+
+df_dise_ndfs_final <- df_dise_ndfs_final %>%
+  mutate("Station Number" = recode(`Station Number`, "B9D81450411" = "B9D81461410")) #change to the WQA station number
+```
+
+
 - Check DateTimes
 ```{r}
 # any missing dates?
@@ -1056,7 +1068,7 @@ df_name_check <- df_stations_discrete %>%
 
 df_gps_check <- df_stations_discrete %>%
   count(Latitude, Longitude) %>%
-  filter(n > 1) #found two stations with lat/long of 38.24285, -121.6836
+  filter(n > 1) #found two stations with lat/long of 38.24285, -121.6836 - fixed!
 
 df_station_dup <- df_stations_discrete %>%
   filter(Latitude == 38.24285 & Longitude == -121.6836) 
