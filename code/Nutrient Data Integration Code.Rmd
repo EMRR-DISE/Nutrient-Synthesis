@@ -1318,6 +1318,11 @@ df_nutrients_clean <- df_nutrients_final %>%
 
 range(df_nutrients_clean$Date_Time)
 
+#some WQA data present for second half of 2024, but all other groups only go through June 2024 due to delay in Bryte reporting - cut off at July
+
+df_nutrients_clean <- df_nutrients_clean %>%
+  filter(Date_Time < "2024-07-01 00:00:00 -08") #filter out everything after June 2024
+
 rm(df_nutrients_comb, df_nutrients_final, df_methods)
 ```
 
@@ -1330,6 +1335,12 @@ quick_plot <- ggplot(df_nutrients_clean, aes(x = Date_Time, y = Result, color= P
   theme_bw() +
   facet_wrap(.~Analyte, ncol = 2)
 plot(quick_plot)
+
+plot <- ggplot(df_nutrients_clean, aes(x = Date_Time, y = Result, color= Project)) +
+  geom_point() + 
+  theme_bw() +
+  facet_wrap(.~Analyte, ncol = 2)
+plot(plot)
 
 ```
 
