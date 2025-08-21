@@ -56,6 +56,7 @@ get_edi_file <- function(pkg_id, fname) {
 
 -Run function to read in SharePoint files
 ```{r}
+
 abs_nutrient_path <- function(fp_rel = NULL) {
 
   base_path <- file.path(Sys.getenv('USERPROFILE'), 'California Department of Water Resources', 'Nutrient synthesis - Documents/Data Integration Team/2025 Data Integration Code Files')
@@ -87,8 +88,10 @@ check_non_numeric <- function(df, col_name) {
       cat('Problematic values:\n')
       print(unique(original[na_indices]))
       cat('At rows:', na_indices[1:min(10, length(na_indices))], '\n\n')
+    } else {
+    cat('Column:', col_name, 'has no problematic values\n')
     }
-  }
+  } 
 }
 ```
 
@@ -102,24 +105,57 @@ fp_tp <- abs_nutrient_path("Tidal Parr_Data_Final.csv")
 
 df_tp <- read_csv(fp_tp) #read in data file
 
-rm(fp_tp) #remove file paths
+#rm(fp_tp) #remove file paths
 ```
 
 -Check/Format Data
 ```{r}
 unique(df_tp$Matrix) #only shows Water, Natural
+#but also has NA's... why? 
+
+foo = filter(df_tp, is.na(Matrix))
+# View(foo)
+#looks like a few blanks and random lines with stuff we don't want. 
+#filtering to remove rows with NA's for results (below) should fix this. 
+
 unique(df_tp$`Sample Type`) #only shows Normal Samples
+unique(df_tp$`Lab Dup`) #but there are still lab duplicates in there, which is confusing. Maybe filter those out?
 unique(df_tp$`Analyte`) #no other analytes present besides what we want 
+
+#Morgan's response to Lab Dup question: Sample Type column only indicates normal, field dups, and blanks (does not indicate lab dups), everything except normal samples gets filtered out later, including lab dups 
 
 df_tp_final <- df_tp %>%
   mutate(Date_Time = mdy_hm(`Collection Date`)) %>% #format date
   select(c("Station Number", "Date_Time", "Sample Code", "Analyte", "Result", "Rpt Limit", "Units", "Method", "Lab Dup", "Sample Type", "Description", "Notes")) %>% #remove unwanted columns
   add_column(Project = "Tidal Parr Study") %>% #add Project column and have it all say Tidal Parr
   add_column("Long Station Name" = NA, "Short Station Name" = NA) %>% #data file doesn't have station names
-  filter(!(is.na(`Result`) | `Result` == "N.S.")) #get rid of rows with NA or NS in the result column
+  filter(!(is.na(`Result`) | `Result` == "N.S.")) %>% #get rid of rows with NA or NS in the result column
+  filter(is.na(`Lab Dup`)) # remove lab duplicates
 
-rm(df_tp) #remove intermediate data frames
+# double check unique checks now that NA results are gone and lab dupes are filtered out
+unique(df_tp_final$`Sample Type`)
+unique(df_tp_final$`Lab Dup`)
+unique(df_tp_final$`Analyte`)
+
+rm(df_tp, foo) #remove intermediate data frames
 ```
+
+- Check DateTimes
+```{r}
+# any missing dates?
+df_date_test <- df_tp_final %>% filter(is.na(Date_Time))
+
+#getting an error on the line above
+
+# any missing times?
+df_time_test <- df_tp_final %>%
+  filter(format(Date_Time, '%H:%M:%S') == '00:00:00')
+
+#no missing date times
+
+rm(df_date_test, df_time_test)
+```
+
 
 ### 2 - O&M
 
@@ -150,7 +186,12 @@ rm(fp_aq1, fp_aq2, fp_aq3, fp_nba, fp_ofd, fp_sba) #remove file paths
 ```{r}
 df_om <- bind_rows(df_aq1, df_aq2, df_aq3, df_nba, df_ofd, df_sba) #combine all data files into one data frame
 
+# check nothing was lost in the bind
+nrow(df_om) == nrow(df_aq1)+nrow(df_aq2)+nrow(df_aq3)+nrow(df_nba)+nrow(df_ofd)+nrow(df_sba)
+
 rm(df_aq1, df_aq2, df_aq3, df_nba, df_ofd, df_sba) #remove intermediate data frames
+#Just a random note from Rosie, but I almost never remove intermediate data frames unless I start running into memory issues. But maybe it's best practice?
+# Perry: I like to for clutter reasons (after ensuring everything works correctly), but yeah, it's personal pref so long as you're not running into memory problems.
 ```
 
 -Check/Format Data
@@ -158,6 +199,11 @@ rm(df_aq1, df_aq2, df_aq3, df_nba, df_ofd, df_sba) #remove intermediate data fra
 unique(df_om$Matrix) #only shows Water, Natural
 unique(df_om$`Sample Type`) #only shows Normal Samples
 unique(df_om$Analyte) #no other analytes present besides what we want
+foo = filter(df_om, is.na(Matrix))
+#just junk columns left over at the end.
+
+unique(df_om$`Lab Dup`) #still some lab dups in there
+
 
 df_om_new <- df_om %>%
   filter(!(str_detect(`Sample Code`, "^C"))) #remove the sample codes that start with a "C" (these belong to a different group and were not sampled by O&M - confirmed with data contact)
@@ -166,17 +212,41 @@ df_om_final <- df_om_new %>%
   mutate(Date_Time = mdy_hm(`Collection Date`)) %>% #format date
   select(c("Long Station Name", "Short Station Name", "Station Number", "Date_Time", "Sample Code", "Analyte", "Result", "Rpt Limit", "Units", "Method", "Lab Dup", "Sample Type", "Description", "Notes")) %>% #remove unwanted columns
   add_column(Project = "SWP Routine Monitoring") %>% #add Project column and have it all say SWP Routine Monitoring
-  filter(!(is.na(`Result`) | `Result` == "N.S.")) #get rid of rows with NA or NS in the result column
+  filter(!(is.na(`Result`) | `Result` == "N.S.")) %>% #get rid of rows with NA or NS in the result column
+  filter(is.na(`Lab Dup`)) # remove lab duplicates
 
-rm(df_om, df_om_new) #remove intermediate data frames
+# double check after filtering
+unique(df_om_final$`Sample Type`)
+unique(df_om_final$Analyte) 
+unique(df_om_final$`Lab Dup`)
+
+rm(df_om, df_om_new, foo) #remove intermediate data frames
+```
+
+- Check DateTimes
+```{r}
+# any missing dates?
+df_date_test <- df_om_final %>% filter(is.na(Date_Time))
+
+# any missing times?
+df_time_test <- df_om_final %>%
+  filter(format(Date_Time, '%H:%M:%S') == '00:00:00') %>%
+  distinct(`Date_Time`,`Sample Code`)
+
+# a few missing times
+# TODO: follow up? or is it fine?
+#Morgan: I think it's probably fine for discrete
+
+rm(df_date_test, df_time_test)
 ```
 
 ### 3 - NDFS (DISE)
 
 -Import NDFS data
 ```{r}
+#looks like the first 1000 "Notes" fields were blank, so got read in as logical.
 fp_ndfs <- abs_nutrient_path("NDFS Data.csv")
-df_ndfs <- read_csv(fp_ndfs)
+df_ndfs <- read_csv(fp_ndfs, guess_max = 4000)
 
 rm(fp_ndfs) #remove file paths
 ```
@@ -191,9 +261,34 @@ df_dise_ndfs_final <- df_ndfs %>%
   mutate(Date_Time = mdy_hm(`Collection Date`)) %>% #format date
   select(c("Long Station Name", "Short Station Name", "Station Number", "Date_Time", "Sample Code", "Analyte", "Result", "Rpt Limit", "Units", "Method", "Lab Dup", "Sample Type", "Description", "Notes")) %>% #remove unwanted rows
   add_column(Project = "DISE NDFS Study") %>% #add Project column and have it all say NDFS Study
-  filter(!(is.na(`Result`) | `Result` == "N.S.")) #get rid of rows with NA or NS in the result column
+  filter(!(is.na(`Result`) | `Result` == "N.S.")) %>% #get rid of rows with NA or NS in the result column
+  filter(`Sample Type` == 'Normal Sample') # filter out duplicates
 
 rm(df_ndfs) #remove intermediate data frames
+```
+-Update Liberty Island station
+```{r}
+unique(df_dise_ndfs_final$`Short Station Name`)
+unique(df_dise_ndfs_final$`Station Number`)
+
+#DISE NDFS and WQA have the same coordinates but slightly different names for South Tip at Liberty Island - use WQA's station name and number
+
+df_dise_ndfs_final <- df_dise_ndfs_final %>%
+  mutate("Station Number" = recode(`Station Number`, "B9D81450411" = "B9D81461410")) #change to the WQA station number
+```
+
+
+- Check DateTimes
+```{r}
+# any missing dates?
+df_date_test <- df_dise_ndfs_final %>% filter(is.na(Date_Time))
+
+# any missing times?
+df_time_test <- df_dise_ndfs_final %>%
+  filter(format(Date_Time, '%H:%M:%S') == '00:00:00') %>%
+  distinct(`Date_Time`,`Sample Code`)
+
+rm(df_date_test, df_time_test)
 ```
 
 ### 4 - NCRO
@@ -201,7 +296,7 @@ rm(df_ndfs) #remove intermediate data frames
 -Import NCRO data (all projects combined into one file)
 ```{r}
 fp_ncro <- abs_nutrient_path("NCRO Data.csv")
-df_ncro <- read_csv(fp_ncro)
+df_ncro <- read_csv(fp_ncro, guess_max = 30000)
 
 rm(fp_ncro) #remove file paths
 ```
@@ -211,11 +306,16 @@ rm(fp_ncro) #remove file paths
 unique(df_ncro$`Short Station Name`)
 unique(df_ncro$`Long Station Name`)
 
+# only NA is junk data; filter out
+df_NA_test <- df_ncro %>% filter(is.na(df_ncro$`Long Station Name`) | is.na(df_ncro$`Short Station Name`))
+
+df_ncro <- df_ncro %>% filter(!(is.na(df_ncro$`Long Station Name`) | is.na(df_ncro$`Short Station Name`))) # two fewer, as expected
+
 #since all projects were exported from WDL in one file, we need to differentiate them based on station names
 
 #project 1 - south delta temporary barriers
 df_sdtb <- df_ncro %>%
-  filter(`Long Station Name` == "Doughty Cut near Grantline Canal" | `Long Station Name` == "Grant Line Canal near Old River" | `Long Station Name` == "Grant Line Canal East" | `Long Station Name` == "Middle River at Howard Road" | `Long Station Name` == "Middle River at Undine Road" | `Long Station Name` == "Middle River near Tracy Road" | `Long Station Name` == "Old River above DMC Barrier" | `Long Station Name` == "Old River near Head" | `Long Station Name` == "Old River Upstream of Mountain House Creek" | `Long Station Name` == "Old River near Doughty Cut - ORX" | `Long Station Name` == "Paradise Cut Upstream" | `Long Station Name` == "Sugar Cut downstream of Tom Paine Slough" | `Long Station Name` == "Old River at Tracy Wildlife Association" | `Long Station Name` == "Victoria Canal near Byron" | `Long Station Name` == "Tom Paine Slough above Intake" | `Long Station Name` == "Grant Ln Can @ Tracy Rd Bdg" | `Long Station Name` == "Grantline Canal above Dam") %>% #filter for the SDTB stations
+  filter(`Long Station Name` == "Doughty Cut near Grantline Canal" | `Long Station Name` == "Grant Line Canal near Old River" | `Long Station Name` == "Grant Line Canal East" | `Long Station Name` == "Middle River at Howard Road" | `Long Station Name` == "Middle River at Undine Road" | `Long Station Name` == "Middle River near Tracy Road" | `Long Station Name` == "Old River above DMC Barrier" | `Long Station Name` == "Old River near Head" | `Long Station Name` == "Old River Upstream of Mountain House Creek" | `Long Station Name` == "Old River near Doughty Cut - ORX" | `Long Station Name` == "Paradise Cut Upstream" | `Long Station Name` == "Sugar Cut downstream of Tom Paine Slough" | `Long Station Name` == "Old River at Tracy Wildlife Association" | `Long Station Name` == "Victoria Canal near Byron" | `Long Station Name` == "Tom Paine Slough above Intake" | `Long Station Name` == "Grant Ln Can @ Tracy Rd Bdg" | `Long Station Name` == "Grantline Canal above Dam" | `Long Station Name` == "Middle R @ Tracy Rd Bdg" | `Long Station Name` == "Middle River @ Union Point - P10A" | `Long Station Name` == "Old River Downstream DMC Barrier") %>% #filter for the SDTB stations
   add_column(Project = "South Delta Temporary Barriers Project") #add Project column and have it all say SDTB
 
 #project 2 - emergency drought barrier 
@@ -237,19 +337,61 @@ df_ndfs <- df_ncro %>%
 df_ncro_new <- bind_rows(df_sdtb, df_edb, df_rs, df_ndfs)
 ```
 
+- Double check all stations were assigned correctly
+```{r}
+# differing number of rows; ncro_new missing about 30 rows - fixed!
+nrow(df_ncro_new) == nrow(df_ncro)
+
+# same 3 missing
+setdiff(df_ncro$`Long Station Name`, df_ncro_new$`Long Station Name`)
+setdiff(df_ncro$`Short Station Name`, df_ncro_new$`Short Station Name`)
+
+# TODO: should these be included in the dataset?
+#Morgan: Yes, I missed those. Added them in above to the sdtb data frame
+
+# Perry tip: usually better to use case_when in mutate than to break up in multiple dataframes, as it's easier to tell when data is excluded/formatted incorrectly. Can you "%in%" so you don't have to write out the column name each time, eg:
+# df_test %>% mutate(Column = case_when(
+                # Other_col %in% c(<list of stations>) ~ <val to assign>,
+                # TRUE ~ NA)
+              # )
+```
+
 -Check/format data
 ```{r}
 unique(df_ncro_new$Matrix) #only shows Water, Natural
 unique(df_ncro_new$`Sample Type`) #shows Normal Samples, Replicate Samples, and Duplicate Samples
 unique(df_ncro_new$`Analyte`) #includes the analytes we want, plus dissolved nitrate (keep) and dissolved TKN (remove), and includes field data
 
+
 df_ncro_final <- df_ncro_new %>%
-  mutate(Date_Time = mdy_hm(`Collection Date`)) %>% #format date
+  mutate(Date_Time = mdy_hm(`Collection Date`)) #format date
+
+range(df_ncro_final$Date_Time) #dates are from 1999-2024, need to remove everything before 2010
+
+df_ncro_final <- df_ncro_final %>% 
+  mutate(year = year(Date_Time)) %>% #create a year column
+  filter(year > 2009) %>% #remove everything before 2010
   filter(Analyte == "Dissolved Ammonia" | Analyte == "Dissolved Nitrate + Nitrite"| Analyte == "Dissolved Organic Nitrogen"| Analyte == "Dissolved ortho-Phosphate" | Analyte == "Dissolved Nitrate" | Analyte == "Total Phosphorus" | Analyte == "Total Kjeldahl Nitrogen") %>% #filter for the analytes we want
   select(c("Long Station Name", "Short Station Name", "Station Number", "Date_Time", "Sample Code", "Analyte", "Result", "Rpt Limit", "Units", "Method", "Lab Dup", "Sample Type", "Description", "Notes", Project)) %>% #remove unwanted rows
   filter(!(is.na(`Result`) | `Result` == "N.S.")) #get rid of rows with NA or NS in the result column
 
-rm(df_ncro, df_ndfs, df_ncro_new, df_sdtb, df_rs, df_edb)
+# check this filtered correctly
+unique(df_ncro_final$Analyte)
+
+rm(df_ncro, df_ndfs, df_ncro_new, df_sdtb, df_rs, df_edb, df_NA_test)
+```
+
+- Check DateTimes
+```{r}
+# any missing dates?
+df_date_test <- df_ncro_final %>% filter(is.na(Date_Time))
+
+# any missing times?
+df_time_test <- df_ncro_final %>%
+  filter(format(Date_Time, '%H:%M:%S') == '00:00:00') %>%
+  distinct(`Date_Time`,`Sample Code`)
+
+rm(df_date_test, df_time_test)
 ```
 
 ### 5 - AEU (WDL)
@@ -293,7 +435,8 @@ rm(df_wdl_new) #remove intermediate data frames (need to keep raw WDL data, df_a
 -Import WQA discrete data file
 ```{r}
 fp_wqa <- abs_nutrient_path("WQA Discrete Data.csv")
-df_wqa <- read_csv(fp_wqa)
+df_wqa <- read_csv(fp_wqa, guess_max = 20000)
+#problems(df_wqa)
 
 rm(fp_wqa) #remove file paths
 ```
@@ -332,9 +475,24 @@ df_aeu_edi <- get_edi_file(1391, "nutr_wq_clean") #1391 is the EDI package ID, n
 ```{r}
 
 df_aeu_new <- df_aeu_edi %>% 
-  mutate(Date_Time = ymd_hms(datetime)) %>% #format datetime column
+  mutate(Date_Time = parse_date_time(`datetime`, orders = c("Ymd HMS", "Ymd"))) %>% #format date, include both formats since some times missing
   mutate(year = year(Date_Time)) %>% #add a year column
   filter(year > 2009) #get rid of anything prior to 2010
+
+#six date times failed to parse.
+# df_aeu_test <- df_aeu_edi %>% 
+#   mutate(Date_Time = ymd_hms(datetime)) %>%
+#   filter(is.na(Date_Time))
+#looks like just a few ones that didn't have time recorded, Date still looks good.
+#So use date for Date_Time in those cases.
+#Morgan: updated the mutate date line above to account for the 6 rows that didn't have times
+
+# df_aeu_new <- df_aeu_edi %>% 
+#   mutate(Date_Time = ymd_hms(datetime),  #format datetime column
+#          Date_Time = case_when(is.na(Date_Time) ~ sample_date,
+#                                TRUE ~ Date_Time),
+#   year = year(Date_Time)) %>% #add a year column
+#   filter(year > 2009) #get rid of anything prior to 2010
 
 unique(df_aeu_new$year) #confirm the data has only the years we want (lab data only goes through 2021)
 
@@ -407,6 +565,16 @@ df_aeu_NDs <- df_aeu_NDs %>%
 rm(df_aeu_ammonia, df_aeu_nitrate, df_aeu_ortho) #remove intermediate data frames
 ```
 
+```{r}
+# check if any data was lost
+df_aeu_test <- df_aeu_long %>%
+  filter(Analyte %in% c('diss_ammonia','diss_nitrate_nitrite','diss_orthophos'))
+
+nrow(df_aeu_NDs) == nrow(df_aeu_test)
+
+rm(df_aeu_test)
+```
+
 -Add data for the three non-detect analytes back into df_aeu_long
 ```{r}
 df_aeu_long2 <- df_aeu_long %>%
@@ -468,6 +636,10 @@ df_methods <- data.frame(Analyte = c("Dissolved Ammonia", "Dissolved Nitrate + N
               Method = c("EPA 350.1","Std Method 4500-NO3-, F", "EPA 351.2", "EPA 365.4", "EPA 351.2/EPA 350.1", "EPA 365.1"))
 
 df_aeu_comb <- left_join(df_aeu_comb, df_methods, by = "Analyte") #use left join to add methods to EDI data based on Analyte
+
+# double check no NAs
+df_NA_test <- df_aeu_comb %>% filter(is.na('Method'))
+
 ```
 
 -Add WDL station numbers to data (need this to get lat/longs added later)
@@ -482,8 +654,10 @@ df_aeu_comb <- left_join(df_aeu_comb, df_aeu_station_numbers, by = "Station_Name
 df_aeu_comb <- df_aeu_comb %>%
   rename("Station Number" = Station_Number) #rename the station number column to match the WDL data
 
-rm(df_aeu_station_numbers)
+# double check no NAs
+df_NA_test <- df_aeu_comb %>% filter(is.na('Station Number'))
 
+rm(df_aeu_station_numbers, df_NA_test)
 ```
 
 -Add sample codes from WDL data
@@ -517,14 +691,17 @@ df_detected <- df_aeu_comb %>%
   filter(Detection_Condition == "Detected") %>% #filter for just the detected values
   select(-`Rpt Limit`) #remove RL column
 
-#unique(df_detected$`Rpt Limit`) #confirmed there are no RLs before removing the RL column above 
+# unique(df_detected$`Rpt Limit`) #confirmed there are no RLs before removing the RL column above
 
 df_detected <- left_join(df_detected, df_RLs, by = c("Station Number", "Date_Time", "Sample Code", "Analyte"))
 
 df_not_detected <- df_aeu_comb %>%
-  filter(Detection_Condition == "Not Detected") #filter for just the detected values
+  filter(Detection_Condition == "Not Detected") #filter for just the not detected values
 
 df_aeu_comb <- bind_rows(df_detected, df_not_detected)
+
+# check everything was added
+nrow(df_aeu_comb) == nrow(df_detected)+nrow(df_not_detected)
 
 rm(df_detected, df_not_detected, df_RLs)
 ```
@@ -553,7 +730,7 @@ df_demp <- read_csv(fp_demp)
 fp_latlong <- abs_nutrient_path("DEMP_LSZ_LatLong.csv")
 df_latlong <- read_csv(fp_latlong)
 
-rm(fp_demp, fp_latlong) #remove file paths
+#rm(fp_demp, fp_latlong) #remove file paths
 ```
 
 -Check data
@@ -562,7 +739,6 @@ unique(df_demp$`Observed Property ID`) #confirm it includes only the six analyte
 unique(df_demp$`Lab: Analysis Method`) #look at list of analytical methods
 unique(df_demp$`QC: Type`) #shows only NA, which means no blanks or dups are present
 range(df_demp$`Observed DateTime`) #confirm dates are from 2010-2024
-
 ```
 
 -Get LSZ station lat/longs added to lat/long column
@@ -657,7 +833,7 @@ unique(df_frp$`SampleType`) #normal samples, blank samples, replicate/duplicate 
 
 #analysis method column is not present, will need to add those in
 #some collection times are missing
-#some rows are missing station names
+#some rows are missing station names - remove these
 #missing lat/longs - need to get these from CDFW
 #will need to combine date and time columns
 ```
@@ -665,12 +841,18 @@ unique(df_frp$`SampleType`) #normal samples, blank samples, replicate/duplicate 
 -Add analytical methods
 ```{r}
 df_frp_nutrients <- df_frp %>%
-  filter(Analyte == "Dissolved Ammonia" | Analyte == "Dissolved Nitrate + Nitrite" | Analyte == "Dissolved Organic Nitrogen" | Analyte == "Dissolved ortho-Phosphate" | Analyte == "Total Kjeldahl Nitrogen" | Analyte == "Total Phosphorus") #only keep the analytes we want
+  filter(Analyte == "Dissolved Ammonia" | Analyte == "Dissolved Nitrate + Nitrite" | Analyte == "Dissolved Organic Nitrogen" | Analyte == "Dissolved ortho-Phosphate" | Analyte == "Total Kjeldahl Nitrogen" | Analyte == "Total Phosphorus")  %>% #only keep the analytes we want
+  filter(SampleType == 'Normal Sample') # filter out QA samples
+
+#check rows with missing stations - 45 rows that will need to be removed
+df_NA_test <- df_frp_nutrients %>% filter(is.na(Location))
+
+df_frp_nutrients <- df_frp_nutrients %>%
+  filter(!is.na(Location))
 
 df_frp_methods <- left_join(df_frp_nutrients, df_methods, by = 'Analyte')
 
 #confirmed these were the methods used by FRP, based on the SOP on EDI
-  
 ```
 
 -Format/filter data
@@ -697,7 +879,17 @@ df_frp_final <- df_frp_new %>%
 #missing Latitude, Longitude, so would need to add those to the list of columns kept above if adding in later
 #missing lab dups and description column, so should probably combine the FRP data after lab dups have been filtered out of WDL data
 
-rm(df_frp, df_frp_new, df_frp_methods, df_frp_nutrients)
+# check no NA Date_Time
+df_date_test <- df_frp_final %>% filter(is.na(Date_Time))
+
+# any missing times?
+df_time_test <- df_frp_final %>%
+  filter(format(Date_Time, '%H:%M:%S') == '00:00:00') %>%
+  distinct(`Date_Time`,`Sample Code`)
+
+# TODO: quite a few, but fine?
+
+rm(df_frp, df_frp_new, df_frp_methods, df_frp_nutrients, df_date_test, df_time_test)
 ```
 
 ## Data Integration and Formatting
@@ -709,6 +901,9 @@ rm(df_frp, df_frp_new, df_frp_methods, df_frp_nutrients)
 df_nutrients_WDL <- bind_rows(df_om_final, df_tp_final, df_dise_ndfs_final, df_ncro_final, df_aeu_wdl_final, df_wqa_final) #combine WDL data sets
 
 unique(df_nutrients_WDL$Project) #confirm all data sets were combined
+
+# check no data was lost
+nrow(df_nutrients_WDL) == nrow(df_om_final)+nrow(df_tp_final)+nrow(df_dise_ndfs_final)+nrow(df_ncro_final)+nrow(df_aeu_wdl_final)+nrow(df_wqa_final)
 
 rm(df_om_final, df_tp_final, df_dise_ndfs_final, df_ncro_final, df_aeu_wdl_final, df_wqa_final) #remove individual WDL data frames
 ```
@@ -724,7 +919,6 @@ unique(df_nutrients_WDL$`Lab Dup`) #confirm that there are no more "Y"'s in the 
 
 df_nutrients_WDL <- df_nutrients_WDL %>%
   select(-`Lab Dup`) #remove the Lab Dup column
-
 ```
 
 ### Method Names
@@ -791,7 +985,7 @@ df_nutrients_WDL <- df_nutrients_WDL %>%
 
 unique(df_nutrients_WDL$Method) #confirm they look the way we want
 
-rm(df_ammonia, df_nitratenitrite, df_tkn, df_phos, df_don, df_ortho, df_nitrate) 
+rm(df_ammonia, df_nitratenitrite, df_tkn, df_phos, df_don, df_ortho, df_nitrate)
 ```
 
 ### Add FRP Data (Non-WDL)
@@ -815,6 +1009,7 @@ df_nutrients_WDL <- df_nutrients_WDL %>%
   filter(`Sample Type` == "Normal Sample") %>% #get rid of everything besides normal samples
   select(-`Sample Type`) #remove the sample type column
 
+# Perry: I also removed most of these as it went through, but still good to check here. I like doing it for each individual dataframe as well just in case there's some weird edge cases that are hard to catch once it's synthesized.
 ```
 
 ### Non-Detects
@@ -828,7 +1023,6 @@ df_nutrients_WDL <- df_nutrients_WDL %>%
          .default = Result)) %>% #otherwise leave the result as is
   select(-Result) %>% #remove the old result column
   rename(Result = result2) #rename new result column
- 
 ```
 
 ### Add AEU Data (Non-WDL)
@@ -867,6 +1061,24 @@ df_stations_discrete <- read_csv(fp_stations_discrete)
 df_stations_discrete <- df_stations_discrete %>%
   select(c(Station_Name, Latitude, Longitude, `Station Number`)) #remove unwanted columns
 
+#Checks
+df_name_check <- df_stations_discrete %>%
+  count(Station_Name) %>%
+  filter(n > 1) #Lindsey Slough is the only duplicated station name, one is from FRP, which doesn't have a lat/long associated with it
+
+df_gps_check <- df_stations_discrete %>%
+  count(Latitude, Longitude) %>%
+  filter(n > 1) #found two stations with lat/long of 38.24285, -121.6836 - fixed!
+
+df_station_dup <- df_stations_discrete %>%
+  filter(Latitude == 38.24285 & Longitude == -121.6836) 
+#stations with the same GPS coords are South Tip of Liberty Island (WQA) and Liberty at S End (DISE NDFS), which have different station numbers
+
+df_number_check <- df_stations_discrete %>%
+  count(`Station Number`) %>%
+  filter(n > 1) #no duplicated station numbers (just NAs)
+
+#Add lat/longs
 df_frp <- df_nutrients_comb %>%
   filter(is.na(`Station Number`)) %>% #need to first separate FRP data since there are no station numbers to match
   rename(Station_Name = "Short Station Name")
@@ -883,7 +1095,7 @@ df_nutrients_comb <- bind_rows(df_no_frp_latlong, df_frp) #add FRP data back in
 df_nutrients_comb <- df_nutrients_comb %>%
   select(-c(`Long Station Name`, `Short Station Name`)) #get rid of WDL station name columns
 
-rm(df_frp, df_no_frp, df_no_frp_latlong) #remove intermediate data frames
+rm(df_frp, df_no_frp, df_no_frp_latlong, df_station_dup, df_gps_check, df_name_check, df_number_check) #remove intermediate data frames
 rm(fp_stations_discrete) #remove file paths
 ```
 
@@ -902,17 +1114,27 @@ df_demp_final <- left_join(df_demp_final, df_station_numbers, by = "Station_Name
 names(df_demp_final) %in% names(df_nutrients_comb) #confirm they have the same columns
 
 df_demp_final <- df_demp_final %>%
-  mutate_at('Result', as.numeric) #convert DEMP result column to numeric
+  mutate_at('Result', as.numeric)  #convert DEMP result column to numeric
+
+#When you converted Longitude to numeric NA's happened, so this is to figure out why
+df_nutrients_combx <- df_nutrients_comb %>%
+  mutate(Lat1 = as.numeric(Latitude)) %>% #convert latitude column to numeric
+  mutate(Long1 = as.numeric(Longitude)) %>% #convert longitude column to numeric
+filter(is.na(Long1) & !is.na(Longitude)) 
+
+unique(df_nutrients_combx$Longitude)
+#OH! THere is a space at the end of 'longitude' at station BET
 
 df_nutrients_comb <- df_nutrients_comb %>%
-  mutate_at('Latitude', as.numeric) %>% #convert latitude column to numeric
-  mutate_at('Longitude', as.numeric) #convert longitude column to numeric
+  mutate(Latitude = as.numeric(str_trim(Latitude))) %>% #convert latitude column to numeric, but trim white space first
+  mutate(Longitude = as.numeric(str_trim(Longitude))) #convert longitude column to numeric, but trim white space first
+#no NAs!
 
 df_nutrients_comb <- bind_rows(df_nutrients_comb, df_demp_final)
 
 unique(df_nutrients_comb$Project) #confirm all projects are included
 
-rm(df_demp_final, df_station_numbers, df_stations_discrete)
+rm(df_demp_final, df_station_numbers, df_stations_discrete, df_nutrients_combx)
 ```
 
 
@@ -1000,7 +1222,6 @@ unique(df_nitrate$Units) #only has mg/L
 # unique(df_tkn_unit2$Method) #only has EPA 351.2
 
 #ANSWER: differences in units NOT due to differences in methods
-
 
 # rm(df_ammonia_unit1, df_ammonia_unit2, df_nitrate_unit1, df_nitrate_unit2, df_tkn_unit1, df_tkn_unit2) #remove unit data frames
 ```
@@ -1097,6 +1318,11 @@ df_nutrients_clean <- df_nutrients_final %>%
 
 range(df_nutrients_clean$Date_Time)
 
+#some WQA data present for second half of 2024, but all other groups only go through June 2024 due to delay in Bryte reporting - cut off at July
+
+df_nutrients_clean <- df_nutrients_clean %>%
+  filter(Date_Time < "2024-07-01 00:00:00 -08") #filter out everything after June 2024
+
 rm(df_nutrients_comb, df_nutrients_final, df_methods)
 ```
 
@@ -1110,6 +1336,89 @@ quick_plot <- ggplot(df_nutrients_clean, aes(x = Date_Time, y = Result, color= P
   facet_wrap(.~Analyte, ncol = 2)
 plot(quick_plot)
 
+plot <- ggplot(df_nutrients_clean, aes(x = Date_Time, y = Result, color= Project)) +
+  geom_point() + 
+  theme_bw() +
+  facet_wrap(.~Analyte, ncol = 2)
+plot(plot)
+
+```
+
+
+### Check duplicate Station/Date/Time/Analyte
+
+```{r}
+# TODO: true duplicates, can remove
+df_dups <- df_nutrients_clean %>%
+  filter(duplicated(.))
+
+#remove all duplicated rows
+df_nutrients_clean <- df_nutrients_clean %>%
+  distinct()
+
+unique(df_dups$Project)
+
+rm(df_dups)
+```
+
+
+```{r}
+# TODO: key duplicates; are these real?
+df_dups1 <- df_nutrients_clean %>%
+  count(Project, Station_Name, Date_Time, Analyte) %>%
+  filter(n > 1)
+
+unique(df_dups1$Project)#FRP, SWP, NCRO-SDTB, WQA, n=2-6
+
+#Morgan: I would think some of these are real, since we can't assume each project only collected one of each sample/analyte per sampling event. It may be helpful to add sample code in there, since that's what FLIMS uses to distinguish "different" samples.
+
+#check with sample code
+df_dups2 <- df_nutrients_clean %>%
+  count(Project, Station_Name, Date_Time, Analyte, Sample_Code) %>%
+  filter(n > 1)
+
+unique(df_dups2$Project) #same four projects as above, but n=2 for all 
+```
+
+
+```{r}
+# TODO: this one (without time) has slightly more matches; are they real?
+df_dups3 <- df_nutrients_clean %>%
+  mutate(Date = as.Date(Date_Time)) %>%
+  count(Project, Station_Name, Date, Analyte) %>%
+  filter(n > 1)
+
+unique(df_dups3$Project) #same four projects
+
+rm(df_dups1, df_dups2, df_dups3)
+```
+-Remove additional lab dups (Lab Dup column only identifies lab dups going back to Dec 2012)
+```{r}
+# Define grouping variables for each unique duplicate pair
+grp_lab_dups <- c("Project", "Station_Name", "Date_Time", "Analyte", "Sample_Code")
+
+# Pull out lab dups and select one at random
+df_data_lab_dups <- df_nutrients_clean %>%
+  add_count(pick(all_of(grp_lab_dups))) %>%
+  filter(n > 1) %>%
+  select(-n) %>%
+  slice_sample(n = 1, by = all_of(grp_lab_dups))
+
+# Add back the cleaned up lab dup data to the main data frame
+df_nutrients_clean <- df_nutrients_clean %>%
+  anti_join(
+    df_data_lab_dups %>% select(all_of(grp_lab_dups)),
+    by = grp_lab_dups
+  ) %>%
+  bind_rows(df_data_lab_dups)
+```
+
+
+### Round values
+```{r}
+# TODO: check that this is valid rounding; use case_when if certain nutrients have more sig figs, or if its dif for dif programs
+#df_nutrients_clean <- df_nutrients_clean %>% mutate(Result = round(Result, 2),
+                              #Reporting_Limit = round(Reporting_Limit, 2))
 ```
 
 ### Export as csv file
@@ -1117,7 +1426,7 @@ plot(quick_plot)
 ```{r}
 fp_output_discrete <- abs_nutrient_path("../EDI Data Files/nutrient_data_discrete.csv")
 
-write_csv(df_nutrients_clean, fp_output_discrete)
+#write_csv(df_nutrients_clean, fp_output_discrete)
 ```
 
 
@@ -1214,7 +1523,7 @@ rm(df_rtdf_banks, df_rtdf_gia, df_rtdf_jones, df_rtdf_vern)
 df_continuous_all <- bind_rows(df_cemp_suna, df_wqa_rtdf)
 
 df_continuous_final <- df_continuous_all %>%
-  filter(!(is.na(Result))) %>% #remove NA results (need to confirm whether there's a way to determine if any are NDs)
+  filter(!(is.na(Result))) %>% #remove NA results (confirmed this is missing data, not non-detect data)
   select(c(Project, Station_Name, Date_Time, Result)) #reorder columns
 
 rm(df_cemp_suna, df_wqa_rtdf, df_continuous_all)
@@ -1250,12 +1559,52 @@ quick_plot <- ggplot(df_continuous_clean, aes(x = Date_Time, y = Result, color= 
 plot(quick_plot)
 ```
 
+### Round values
+
+```{r}
+# TODO: check that this is valid rounding; use case_when if certain nutrients have more sig figs, or if its dif for dif programs
+
+# I didn't run it because I know this is dif for dif continuous ones.
+
+# df_continuous_clean <- df_continuous_clean %>% mutate(Result = round(Result, 2),
+#                               Reporting_Limit = round(Reporting_Limit, 2))
+```
+
+### Check duplicate Station/Date/Time/Analyte
+
+```{r}
+# none are fully duplicates
+df_dup_test <- df_continuous_clean %>%
+  filter(duplicated(.))
+
+rm(df_dup_test)
+```
+
+
+```{r}
+# TODO: some have duplicate "keys"; are these real?
+dup_check1 <- df_continuous_clean %>%
+  count(Station_Name, Date_Time) %>%
+  filter(n > 1)
+
+unique(dup_check1$Station_Name)
+
+#only station that has dups is C10A, which is present in both the CEMP SUNA data and the WQA RTDF data - could just be overlap between projects
+
+dup_check2 <- df_continuous_clean %>%
+  count(Project, Station_Name, Date_Time) %>%
+  filter(n > 1)
+
+#confirmed, was just overlap between the two projects (no dups when project is included)
+
+rm(dup_check1, dup_check2)
+```
 
 ### Export as csv file
 ```{r}
-fp_output_continuous <- abs_nutrient_path("../EDI Data Files/nutrient_data_continuous.csv")
+# fp_output_continuous <- abs_nutrient_path("../EDI Data Files/nutrient_data_continuous.csv")
 
-write_csv(df_continuous_clean, fp_output_continuous)
+# write_csv(df_continuous_clean, fp_output_continuous)
 
 ```
 
