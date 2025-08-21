@@ -1,0 +1,209 @@
+```{r}
+# read in data
+library(tidyverse)
+library(lavaan)
+library(stats)
+library(piecewiseSEM)
+library(lme4)
+
+dat <- read_csv("https://stats.idre.ucla.edu/wp-content/uploads/2021/02/worland5.csv")
+```
+
+# Introduction
+
+(A lot of this code and wording is taken from <https://stats.oarc.ucla.edu/r/seminars/rsem/> . See link for more detailed explanations and path diagrams).
+
+**Structural equation modeling** is a linear model framework that models simultaneous regression equations with or without latent variables. This encompasses a wide range of model types. It can be used in prediction, although it's especially useful for causal inference.
+
+## Background Regression Types
+
+### Simple Regression
+
+Simple regression is one explanatory and one outcome variable. The simplest way to model this is with `lm`:
+
+```{r}
+m1 <- lm(read ~ motiv, data=dat)
+summary(m1)
+```
+
+### Multiple Regression
+
+Multiple regression is multiple explanatory variables and one outcome variable. Again, `lm` is the simplest way to model this:
+
+```{r}
+m2 <- lm(read ~ ppsych + motiv, data=dat)
+summary(m2)
+```
+
+### Multivariate regression
+
+Multivariate regression is useful for modeling multiple outcome variables. **You do not have to assume whether or not there is residual covariance between the outcome variables**. If specified this way, you must use `lavaan` or a similar package to correctly account for the covariance between outcome variables:
+
+```{r}
+m3 <- '
+  read ~ ppsych + motiv
+  arith ~ motiv
+'
+fit3 <- sem(m3, data=dat)
+summary(fit3)
+```
+
+From this, we see the estimated regression coefficients for each path. We also see the covariance between the two outcome variables (`read` and `arith`) is significant, indicating that the model may be missing paths and factors (some of which are possibly shared between the two) or that a link between the two variables is needed.
+
+Additionally, the chi-square test (Model Test User Model) is significant, which usually indicates there's some lack of model fit. However, this is sensitive to sample size.
+
+## Piecewise SEM
+
+Piecewise SEM (also known as confirmatory path analysis) uses local estimation to determine model relationships. In this, each node's solution is determined by its parent explanatory variables and correlated outcome variables **with the assumption that the outcome variables have no residual covariance**.
+
+Practically, this means we draw a connecting line between outcome variables.
+
+Mathematically, this means *you are running many separate multiple regressions*. You can either do this manually with `lm` or via the `piecewiseSEM` package; the `psem` function has the added benefit of giving you some model evaluation information.
+
+**manual**
+
+```{r}
+m4_lm1 <- lm(read ~ ppsych + motiv, data = dat)
+(m4_lm1 <- summary(m4_lm1))
+```
+
+```{r}
+m4_lm2 <- lm(arith ~ motiv + read, data = dat)
+(m4_lm2 <- summary(m4_lm2))
+```
+
+**piecewiseSEM**
+
+```{r}
+m4_p1 <- lm(read ~ ppsych + motiv, data = dat)
+m4_p2 <- lm(arith ~ motiv + read, data = dat)
+
+psem_model <- psem(m4_p1, m4_p2)
+
+summary(psem_model)
+```
+
+This output shows that the global goodness-of-fit tests are both significant, indicating that the independence assumption is violated for some paths in our model and that one of the paths we purposefully excluded should probably be included. However, again, this is sensitive to sample size.
+
+Nevertheless, we can try to fix this by adding new explanatory paths in another piecewise SEM:
+
+```{r}
+m4_p1 <- lm(read ~ ppsych + motiv, data = dat)
+m4_p2 <- lm(arith ~ ppsych + motiv + read, data = dat)
+
+psem_model <- psem(m4_p1, m4_p2)
+
+summary(psem_model)
+```
+
+The tests now return 1/NA because we have fully saturated our model; there are no unexplained paths left.
+
+We could also, instead, add a residual covariance between the outcome variables in a multivariate regression:
+
+```{r}
+m3 <- '
+  read ~ ppsych + motiv
+  arith ~ motiv + read
+  read ~~ arith
+'
+fit3 <- sem(m3, data=dat)
+summary(fit3)
+```
+
+Note that the covariance is significant.
+
+**Structural regression**
+
+Structural regression ("traditional SEM") allows you to include latent variables in your model.
+
+Here, `adjust`, `risk`, and `achieve` are latent variables. These are variables that can only be inferred from observed variables and represent their "shared" variance. How to define these can be done through factor analysis.
+
+```{r}
+m4 <- '
+# measurement model
+adjust =~ motiv + harm + stabi
+risk =~ verbal + ses + ppsych
+achieve =~ read + arith + spell
+# regressions
+adjust ~ risk 
+achieve ~ adjust + risk
+'
+fit4 <- sem(m4, data=dat)
+summary(fit4, standardized=TRUE, fit.measures=TRUE, rsquare = TRUE)
+```
+
+Here, we interpret the regressions directly. We used `fit.measures = TRUE` to output this information. The CFI and TLI are high, which indicates very good fit, However, RMSEA is 0.1, which indicates borderline poor fit. Overall, a reasonable model.
+
+Note that we also used `standardized = TRUE`. This re-scales the variances to 1 (`std.all` scales both the observed and latent variables).
+
+# Piecewise SEM vs. Traditional SEM
+
+"Traditional" SEM is a global model while piecewise SEM is local one. There are pros and cons to both types of models.
+
+## Traditional SEM
+
+### Pros
+
+-   can model latent variables
+
+### Cons
+
+-   assumptions of linearity *in the observed variables*
+
+-   limited ways of dealing with non-linearity and autocorrelation (eg. transforms and lag terms)
+
+## Piecewise SEM
+
+### Pros
+
+-   much more flexible model structure (basically can do anything)
+
+### Cons
+
+-   can't model latent variables
+
+-   proxy global tests are sensitive to sample size
+
+Additionally, traditional SEM can directly account for residual covariances while piecewise SEM can only do so indirectly by adding additional paths (and can't tell if there's global residual covariance beyond that).
+
+Note that, for both, it's useful to do standard model checks for all regressions.
+
+# Conclusion
+
+Assuming we don't have issues with residual covariances, the decision between traditional vs. piecewise SEM comes down to how we want to model our biological variables. If we choose to use latent variables, we must go with traditional SEM. If we don't, both are viable, though piecewise SEM is more flexible (we can also run both as checks for each other). It's also simple enough to run both for comparison purposes.
+
+# Random Effects in SEM
+
+A quick example of random effects in traditional SEM (piecewise SEM can use `lmer`):
+
+```{r}
+data(sleepstudy)
+
+m1 <- lmer(Reaction ~ Days + (1 | Subject), data = sleepstudy)
+summary(m1)
+```
+
+```{r}
+model <- '
+  level: 1
+    Reaction ~ Days
+
+  level: 2
+    Reaction ~~ Reaction
+'
+
+fit <- sem(model,
+           data = sleepstudy,
+           cluster = 'Subject',
+           estimator = 'MLR',
+           missing = 'fiml')
+summary(fit, standardized = TRUE)
+```
+
+# Bayesian Networks
+
+Bayesian networks are similar to SEM; the main difference is they're *non-parametric*. Therefore, the information you gleam for them is slightly different.
+
+With SEM, you dictate how variables relate to each other (usually linearly). With BNs, you do not have to do this, which gives more flexibility when there's non-linearity or a difficult-to-define relationship between variables. This makes it a better option for prediction.
+
+With BNs, you get the probability of an event occurring given the states of the other variables leading up to it. While it doesn't give you quantitative coefficients like SEM (making it a worse option for casual inference) it can still be a useful check to see which variables appear most important and what relationships you expect to see within your data.
