@@ -5,6 +5,7 @@ library(lavaan)
 library(stats)
 library(piecewiseSEM)
 library(lme4)
+library(zoo)
 
 dat <- read_csv("https://stats.idre.ucla.edu/wp-content/uploads/2021/02/worland5.csv")
 ```
@@ -197,7 +198,9 @@ Note that, for both, it's useful to do standard model checks for all regressions
 
 Assuming we don't have issues with residual covariances, the decision between traditional vs. piecewise SEM comes down to how we want to model our biological variables. If we choose to use latent variables, we must go with traditional SEM. If we don't, both are viable, though piecewise SEM is more flexible (we can also run both as checks for each other). It's also simple enough to run both for comparison purposes.
 
-# Random Effects in SEM
+# Extra
+
+## Random Effects in SEM
 
 A quick example of random effects in traditional SEM (piecewise SEM can use `lmer`):
 
@@ -225,10 +228,146 @@ fit <- sem(model,
 summary(fit, standardized = TRUE)
 ```
 
-# Bayesian Networks
+## Bayesian Networks
 
 Bayesian networks are similar to SEM; the main difference is they're *non-parametric*. Therefore, the information you gleam for them is slightly different.
 
 With SEM, you dictate how variables relate to each other (usually linearly). With BNs, you do not have to do this, which gives more flexibility when there's non-linearity or a difficult-to-define relationship between variables. This makes it a better option for prediction in those cases.
 
 With BNs, you get the probability of an event occurring given the states of the other variables leading up to it. While it doesn't give you quantitative coefficients like SEM (making it a worse option for casual inference) it can still be a useful check to see which variables appear most important and what relationships you expect to see within your data.
+
+
+## Time Series Example w/ "Traditional" SEM
+
+Worked example with time series data.
+
+```{r}
+data(airquality)
+
+# interpolate NAs
+df_air <- airquality %>%
+  mutate(
+    Ozone = round(na.approx(Ozone, na.rm = FALSE)),
+    Solar.R = round(na.approx(Solar.R, na.rm = FALSE))
+  )
+
+# create lagged variables
+df_air <- df_air %>%
+  mutate(
+    Wind_log = log(Wind),
+    Temp_log = log(Temp),
+    Ozone_log = log(Ozone),
+    Solar.R_log = log(Solar.R)
+  ) %>%
+  # remove outlier
+  filter(!(Ozone_log < 1))
+```
+
+First, we plot variables to look for possible correlations (normally have more, this is my final version):
+
+```{r}
+vars <- df_air[, c('Ozone_log','Wind_log','Temp','Solar.R_log')]
+
+pairs(vars)
+```
+
+We also check for high correlation:
+
+```{r}
+X <- df_air %>% select(Temp, Wind_log, Solar.R_log) %>% drop_na()
+round(cor(X),3)
+```
+
+We build the SEM based off this (this is my quick final version):
+
+```{r}
+mod <- '
+  # direct effects
+  Ozone_log   ~ Temp + Wind_log + Solar.R_log
+  
+  Wind_log ~ Temp
+'
+
+fit <- sem(mod, data = df_air,  estimator = 'MLR')
+
+summary(fit, standardized = TRUE, fit.measures = TRUE, rsquare = TRUE)
+```
+
+Using robust sandwich errors, we note great model fit (not-significant chi-square, RMSEA = 0, CFI/TLI = 1) (for an actual analysis we'd do some more model fit comparisons with AIC/BIC as well).
+
+We can plot our predicted vs observed values as a check:
+
+```{r}
+ozone_pred <- lavPredictY(fit, 
+                         ynames = 'Ozone_log',
+                         xnames = c('Temp', 'Wind_log', 'Solar.R_log'))
+
+df_plot <- data.frame(
+  ozone_obs = df_air$Ozone_log, 
+  ozone_pred = as.numeric(ozone_pred)
+) %>%
+  mutate(ozone_resid = ozone_obs - ozone_pred)
+
+lim <- range(c(df_plot$ozone_pred, df_plot$ozone_obs), na.rm = TRUE)
+
+ggplot(df_plot, aes(x = ozone_pred, y = ozone_obs)) +
+  geom_point(alpha = 0.6) +
+  geom_abline(slope = 1, intercept = 0, color = 'red', linewidth = 1, linetype = 'dashed') +
+  geom_smooth(method = 'lm', formula = y ~ x,color = 'blue') + 
+  coord_equal(xlim = lim, ylim = lim) +
+  theme_minimal()
+```
+Our regression looks great. We also look at predicted vs. residuals:
+
+```{r}
+lim <- range(c(df_plot$ozone_pred, df_plot$ozone_resid), na.rm = TRUE)
+
+ggplot(df_plot, aes(x = ozone_pred, y = ozone_resid)) +
+  geom_point(alpha = 0.6, size = 2.5) +
+  geom_smooth(method = 'lm', formula = y ~ x,color = 'blue') + 
+  theme_minimal()
+```
+The predicted vs residual plot is centered around 0 with no obvious structure, indicating i.i.d errors.
+
+Next up is the QQ plot:
+
+```{r}
+qqnorm(df_plot$ozone_resid)
+qqline(df_plot$ozone_resid)
+```
+
+Looks good.
+
+### Interpret
+
+Based on this model, Temp, log(Wind), and log(Solar.R) have a significant direct effects on log(Ozone). A 1 SD change in Temp leads to a 0.46 SD increase in log(Ozone) holding other variables constant. A 1 SD change in log(Wind) leads to a 0.28 SD decrease in log(Ozone), while a 1 SD change in log(Solar.R) leads to a 0.17 increase in log(Ozone), again holding other variables constant. Combined, these variables explain 49% of the variance in log(Ozone).
+
+Additionally, Temp has a significant effect on Wind: a 1 SD increase in Temp is associated with a 0.45 SD decrease in log(Wind). This means that Temp has an indirect effect on log(Ozone) as well via log(Wind), which implies a 1 SD increase in Temp indirectly leads to a  $(-0.45)(-0.28) = 0.13 \text{ SD}$ increase in Ozone.
+
+Therefore, Temp's overall effect is a 1 SD increase leads to a $0.46 + 0.13 = 0.59 \text{ SD}$ increase in Ozone.
+
+Based on this, we see that higher solar radiation raises ozone and stronger winds lowers it. Increased temperatures raise ozone both directly and indirectly (due to their association with weaker winds) and is the strongest forcing variable, followed by Wind and then Ozone. We also note that these effects are multiplicative in the un-standardized sample space.
+
+### Alternative Model
+
+I can get the same results using this model specification:
+
+```{r}
+mod <- '
+# direct effects
+  Ozone_log   ~ b*Wind_log + c*Temp + d*Solar.R_log
+  
+# mediator
+  Wind_log ~ a*Temp
+  
+# indirect effect
+  ab := a*b
+  
+# total effect
+  total := c + (a*b)
+'
+
+fit <- sem(mod, data = df_air,  estimator = 'MLR')
+
+summary(fit, standardized = TRUE, fit.measures = TRUE, rsquare = TRUE)
+```
