@@ -83,10 +83,9 @@ psem_model1 <- psem(m4_p1, m4_p2)
 summary(psem_model1, fit.measures=TRUE)
 ```
 
+This output shows that the Fisher's C global goodness-of-fit test was significant, indicating that the independence assumption is violated for some paths in our model and that one of the paths we purposefully excluded should probably be included. However, again, this is sensitive to sample size, and Fisher's C is only a proxy for a true check of the global covariance. We also see that the independence claim between `arith ~ ppsych` was significant, which makes sense with the global results.
 
-This output shows that the  Fisher's C global goodness-of-fit test was significant, indicating that the independence assumption is violated for some paths in our model and that one of the paths we purposefully excluded should probably be included. However, again, this is sensitive to sample size. We also see that the independence claim between `arith ~ ppsych` was significant, which makes sense with the global results.
-
-(Chi-square is also significant; this test is run assuming a "traditional" SEM framework, which can be run because we're using all `lm` models.)
+(Chi-square is also significant; this test is run assuming a "traditional" SEM framework and looks at the global covariance structure. This can be run because we're using all `lm` models.)
 
 We can try to fix this by adding new explanatory paths in another piecewise SEM:
 
@@ -125,17 +124,18 @@ m4c <- '
 fit4c <- sem(m4c, data=dat)
 summary(fit4b)
 ```
+
 Note the significant chi-square test and df = 1. The test statistic/p-value also match the output from our first `psem`.
 
 Interpretation-wise:
 
-- with the piecewise solution, we're stating there's definitely a structural link between `arith` and `ppsych`
+-   with the piecewise solution, we're stating there's definitely a structural link between `arith` and `ppsych`
 
-- with the covariance solution, we're showing that the outcome variables have some common variance source that we're not identifying outright (ie. we believe it's beyond the our model scope)
+-   with the covariance solution, we're showing that the outcome variables have some common variance source that we're not identifying outright (ie. we believe it's beyond the model scope)
 
-- by leaving as-is, the significant chi-square (and Fisher's C) test shows that we're likely missing an important link (either of the two solutions above, in this case)
+-   by leaving as-is, the significant chi-square (and Fisher's C) test shows that we're likely missing an important link (either of the two solutions above, in this case)
 
-Which model is best is dependent on what causal links one believes makes most sense.
+Which model is best is dependent on what causal links one believes makes most sense. With more complex models, these decisions become more important.
 
 **Structural regression**
 
@@ -159,7 +159,7 @@ summary(fit4, standardized=TRUE, fit.measures=TRUE, rsquare = TRUE)
 
 Here, we interpret the regressions directly. We used `fit.measures = TRUE` to output this information. The CFI and TLI are high, which indicates very good fit, However, RMSEA is 0.1, which indicates borderline poor fit. Overall, a reasonable model.
 
-Note that we also used `standardized = TRUE`. This re-scales the variances to 1 (`std.all` scales both the observed and latent variables).
+Note that we also used `standardized = TRUE`. This re-scales the variances to 1 (`std.all` scales both the observed and latent variables). We also output r-square values to determine the amount of variance explained by the predictors.
 
 # Piecewise SEM vs. Traditional SEM
 
@@ -229,6 +229,6 @@ summary(fit, standardized = TRUE)
 
 Bayesian networks are similar to SEM; the main difference is they're *non-parametric*. Therefore, the information you gleam for them is slightly different.
 
-With SEM, you dictate how variables relate to each other (usually linearly). With BNs, you do not have to do this, which gives more flexibility when there's non-linearity or a difficult-to-define relationship between variables. This makes it a better option for prediction.
+With SEM, you dictate how variables relate to each other (usually linearly). With BNs, you do not have to do this, which gives more flexibility when there's non-linearity or a difficult-to-define relationship between variables. This makes it a better option for prediction in those cases.
 
 With BNs, you get the probability of an event occurring given the states of the other variables leading up to it. While it doesn't give you quantitative coefficients like SEM (making it a worse option for casual inference) it can still be a useful check to see which variables appear most important and what relationships you expect to see within your data.
