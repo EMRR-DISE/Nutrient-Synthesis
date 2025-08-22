@@ -78,39 +78,64 @@ m4_lm2 <- lm(arith ~ motiv + read, data = dat)
 m4_p1 <- lm(read ~ ppsych + motiv, data = dat)
 m4_p2 <- lm(arith ~ motiv + read, data = dat)
 
-psem_model <- psem(m4_p1, m4_p2)
+psem_model1 <- psem(m4_p1, m4_p2)
 
-summary(psem_model)
+summary(psem_model1, fit.measures=TRUE)
 ```
 
-This output shows that the global goodness-of-fit tests are both significant, indicating that the independence assumption is violated for some paths in our model and that one of the paths we purposefully excluded should probably be included. However, again, this is sensitive to sample size.
 
-Nevertheless, we can try to fix this by adding new explanatory paths in another piecewise SEM:
+This output shows that the  Fisher's C global goodness-of-fit test was significant, indicating that the independence assumption is violated for some paths in our model and that one of the paths we purposefully excluded should probably be included. However, again, this is sensitive to sample size. We also see that the independence claim between `arith ~ ppsych` was significant, which makes sense with the global results.
+
+(Chi-square is also significant; this test is run assuming a "traditional" SEM framework, which can be run because we're using all `lm` models.)
+
+We can try to fix this by adding new explanatory paths in another piecewise SEM:
 
 ```{r}
 m4_p1 <- lm(read ~ ppsych + motiv, data = dat)
 m4_p2 <- lm(arith ~ ppsych + motiv + read, data = dat)
 
-psem_model <- psem(m4_p1, m4_p2)
+psem_model2 <- psem(m4_p1, m4_p2)
 
-summary(psem_model)
+summary(psem_model2, fit.measures=TRUE)
 ```
 
-The tests now return 1/NA because we have fully saturated our model; there are no unexplained paths left.
+We now get NA for Fisher's C and no independence claims since our model is fully saturated; there are no unexplained paths left.
 
 We could also, instead, add a residual covariance between the outcome variables in a multivariate regression:
 
 ```{r}
-m3 <- '
+m4b <- '
   read ~ ppsych + motiv
   arith ~ motiv + read
   read ~~ arith
 '
-fit3 <- sem(m3, data=dat)
-summary(fit3)
+fit4b <- sem(m4b, data=dat)
+summary(fit4b)
 ```
 
-Note that the covariance is significant.
+Note that the covariance is significant and our df = 0. Our test statistic output matches the chi-square test in the above `psem`.
+
+We could also leave the model as-is using `sem` in `lavaan` instead:
+
+```{r}
+m4c <- '
+  read ~ ppsych + motiv
+  arith ~ motiv + read
+'
+fit4c <- sem(m4c, data=dat)
+summary(fit4b)
+```
+Note the significant chi-square test and df = 1. The test statistic/p-value also match the output from our first `psem`.
+
+Interpretation-wise:
+
+- with the piecewise solution, we're stating there's definitely a structural link between `arith` and `ppsych`
+
+- with the covariance solution, we're showing that the outcome variables have some common variance source that we're not identifying outright (ie. we believe it's beyond the our model scope)
+
+- by leaving as-is, the significant chi-square (and Fisher's C) test shows that we're likely missing an important link (either of the two solutions above, in this case)
+
+Which model is best is dependent on what causal links one believes makes most sense.
 
 **Structural regression**
 
