@@ -122,7 +122,7 @@ m4c <- '
   arith ~ motiv + read
 '
 fit4c <- sem(m4c, data=dat)
-summary(fit4b)
+summary(fit4c)
 ```
 
 Note the significant chi-square test and df = 1. The test statistic/p-value also match the output from our first `psem`.
