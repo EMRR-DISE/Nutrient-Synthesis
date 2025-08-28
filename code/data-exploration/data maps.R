@@ -10,7 +10,7 @@ library(cder)
 library(dataRetrieval)
 library(usmap)
 library(patchwork)
-
+library(here)
 
 #It might actually make more sense to do a heatmap by motnh, year, region.
 
@@ -43,7 +43,7 @@ ggplot(zoopssampls, aes(x = Year, y = SubRegion, fill = Zoops))+ geom_tile()+
 #now clams
 
 #GRTS sites (from betsy, with grazing rate help from jan), as well as longterm sites, but just may and october
-clams = read_csv("data/short_term_density_ms.csv")
+clams = read_csv(here("data/raw/short_term_density_ms.csv"))
 clams2 = select(clams, Year, StationCode, Latitude, Longitude, Month, Season, Survey) %>%
   distinct()%>%
   filter(!is.na(Latitude)) %>%
@@ -88,7 +88,7 @@ ggplot()+
 
 
 ### Map of nutrient stations
-nuts = read_csv("Data/Discrete_Stations_Consolidated.csv")
+nuts = read_csv(here("data/raw/Discrete_Stations_Consolidated.csv"))
 nuts2 = mutate(nuts, Longitude = as.numeric(Longitude), Latitude = as.numeric(Latitude)) %>%
   filter(!is.na(Longitude), !is.na(Latitude)) %>%
   st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326)
@@ -145,4 +145,4 @@ p2= ggplot(filter(allsamples, Year >= 2017))+
 
 p1+p2
 
-ggsave("plots/samplemap.png",width = 12, height = 12, device = "png")
+ggsave(here("results/plots/samplemap.png"), width = 12, height = 12, device = "png")
