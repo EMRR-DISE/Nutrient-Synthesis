@@ -6,6 +6,7 @@ library(tidyverse)
 library(discretewq)
 library(sf)
 library(deltamapr)
+library(here)
 
 #pull all the nutrient data that is currently available in the discretewq package
 
@@ -20,11 +21,11 @@ nutsx = filter(nuts, !is.na(DissNitrateNitrite)) %>%
 
 #Now pull in recent MWQI data from WDL
 
-MWQI = read_csv("data/WQDataReport.csv")
+MWQI = read_csv(here("data/raw/WQDataReport.csv"))
 MWQIx = filter(MWQI, Analyte == "Dissolved Nitrate + Nitrite")
 
 #station gps coordinates
-stations = read_csv("data/WQstationsWDL.csv") %>%
+stations = read_csv(here("data/raw/WQstationsWDL.csv")) %>%
   select(station_number, station_id, latitude, longitude, sample_count)
 
 MWQIx2 = left_join(MWQIx, stations, by = c("StationNumber" = "station_number")) %>%

@@ -6,6 +6,7 @@ library(tidyverse)
 library(discretewq)
 library(deltamapr)
 library(sf)
+library(here)
 
 
 WQ = wq(Sources = c("EMP", "NCRO", "20mm", "FMWT", "STN", "USGS_CAWSC", "USGS_SFBS"),
@@ -62,4 +63,4 @@ WQmonthlysub = filter(WQmonthly, !is.na(Microcystis), !is.na(DissNitrateNitrite)
 ggplot(WQmonthlysub, aes(x = DissNitrateNitrite, y = Microcystis))+
   geom_point()
 
-write.csv(WQmonthlysub, "data/discretewq_monthlymean.csv")
+write.csv(WQmonthlysub, here("data/raw/discretewq_monthlymean.csv"))
