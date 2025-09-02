@@ -1688,6 +1688,37 @@ sort(unique(as.character(df_nutrients_clean$Longitude)))
 rm(df_nutrients_dec)
 ```
 
+### Check collection times
+
+```{r}
+df_times <- df_nutrients_clean %>% 
+  mutate(
+    Hour = hour(Date_Time),
+    Minute = minute(Date_Time),
+    Second = second(Date_Time)
+  )
+
+# Check for samples collected at midnight
+df_times %>% 
+  filter(Hour == 0, Minute == 0, Second == 0) %>% 
+  count(Project)
+# FRP (n = 1750), O&M (n = 118), WQA (n = 109)
+# TODO (DB): These samples most likely did not have a collection time. We should consider adding a
+# Date column, and then convert the samples without collection times to NA. This is how we handle
+# this situation in discretewq. I think this is probably best because we can be more explicit about
+# the records without collection times. Currently someone can misinterpret these samples as being
+# collected at midnight.
+
+# Inspect collection times for oddities
+df_times %>% 
+  # Remove samples collected at midnight
+  filter(!(Hour == 0 & Minute == 0 & Second == 0)) %>% 
+  count(Project, Hour) %>% 
+  View()
+# TODO (DB): DEMP, Tidal Parr, WQA, and YBFMP have some odd collection times (before 5 AM and after
+# 5 PM). We may want to inspect these further before publishing the data.
+```
+
 ### Export as csv file
 
 ```{r}
