@@ -1722,14 +1722,17 @@ df_times %>%
 ### Export as csv file
 
 ```{r}
+# Arrange data in an more organized way before export
+df_nutrients_exp <- df_nutrients_clean %>% arrange(Project, Date_Time, Analyte)
+
 fp_output_discrete <- abs_nutrient_path("../EDI Data Files/nutrient_data_discrete.csv")
-df_nutrients_clean %>% 
+df_nutrients_exp %>% 
   # Convert Date_Time to character to avoid having write_csv convert the time zone to UTC
-  mutate(Date_Time = as.character(Date_Time)) %>% 
-  write_excel_csv(fp_output_discrete)
+  mutate(Date_Time = format(Date_Time, format = "%Y-%m-%d %H:%M:%S")) %>%
+  write_csv(fp_output_discrete)
 
 # Also export to GitHub repo as .rds file (compressed)
-df_nutrients_clean %>% saveRDS(here("data/processed/nutrient_data_discrete.rds"))
+df_nutrients_exp %>% saveRDS(here("data/processed/nutrient_data_discrete.rds"))
 ```
 
 ## Continuous Nutrient Data
@@ -1937,13 +1940,18 @@ rm(dup_check1, dup_check2)
 ### Export as csv file
 
 ```{r}
+# Arrange data in an more organized way before export
+df_continuous_exp <- df_continuous_clean %>% arrange(Project, Station_Name, Date_Time)
+
 fp_output_continuous <- abs_nutrient_path("../EDI Data Files/nutrient_data_continuous.csv")
-df_continuous_clean %>% 
-# Convert Date_Time to character to avoid having write_csv convert the time zone to UTC
-  mutate(Date_Time = as.character(Date_Time)) %>%
+
+# Use write_excel_csv instead because write_csv converts the time zone to UTC
+df_continuous_exp %>% 
+  # Convert Date_Time to character to avoid having write_csv convert the time zone to UTC
+  mutate(Date_Time = format(Date_Time, format = "%Y-%m-%d %H:%M:%S")) %>% 
   write_csv(fp_output_continuous)
 
 # Also export to GitHub repo as .rds file (compressed)
-df_continuous_clean %>% saveRDS(here("data/processed/nutrient_data_continuous.rds"))
+df_continuous_exp %>% saveRDS(here("data/processed/nutrient_data_continuous.rds"))
 ```
 
