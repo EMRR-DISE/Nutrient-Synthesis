@@ -1407,13 +1407,13 @@ df_nutrients_comb %>%
 Fix incorrect units
 
 ```{r}
-# Dave's tip: This can be more succinctly with the following code:
+# Dave's tip: This can be more succinct with the following code:
 df_nutrients_comb <- df_nutrients_comb %>% 
   mutate(
     Units = case_match(
       Analyte,
       "Dissolved Ammonia" ~ "mg/L as N",
-      "Dissolved Nitrate" ~ "mg/L", # not sure if this is correct, should it be mg/L as N?
+      "Dissolved Nitrate" ~ "mg/L", # TODO (DB): not sure if this is correct, should it be mg/L as N?
       "Dissolved Nitrate + Nitrite" ~ "mg/L as N",
       "Dissolved Organic Nitrogen" ~ "mg/L as N",
       "Dissolved ortho-Phosphate" ~ "mg/L as P",
@@ -1523,8 +1523,8 @@ df_nutrients_final %>%
 # There are 7 records collected at Lake Oroville that have values equal to zero. They appear to be
 # analyzed by Test America and are flagged with "J". Additionally, the 4 TKN records have notes that
 # state "Field data only".
-# TODO: The 4 TKN records should most likely be removed, and the remaining 3 records may need to be
-# converted to Not Detected. Need to investigate this further.
+# TODO (DB): The 4 TKN records should most likely be removed, and the remaining 3 records may need
+# to be converted to Not Detected. Need to investigate this further.
 
 df_nutrients_clean <- df_nutrients_final %>%
   filter(Result < 50 | is.na(Result)) 
@@ -1566,7 +1566,7 @@ df_nutrients_clean %>%
   print(n = Inf)
 
 # Just the LSZ stations from DEMP, and the FRP records have NA values for the Station_Number. 
-# TODO: is this okay?
+# TODO (DB): is this okay?
 ```
 
 ### Check duplicate Station/Date/Time/Analyte
@@ -1670,7 +1670,9 @@ df_nutrients_dec %>%
 df_nutrients_dec %>% 
   count(Project, Num_dec_place) %>% 
   filter(Num_dec_place > 3)
-# DEMP (n = 1), SWP (n = 38), WQA (n = 2)
+# DEMP (n = 1), O&M (n = 38), WQA (n = 2)
+
+# TODO (DB): Check if we are okay with the results with 4 digits after the decimal place
 
 # TODO: check that this is valid rounding; use case_when if certain nutrients have more sig figs, or
 # if its different for different programs
@@ -1855,6 +1857,8 @@ df_continuous_dec %>%
   count(Project, Num_dec_place) %>% 
   filter(Num_dec_place > 3)
 # WQA (n = 11,244)
+
+# TODO (DB): Check if we are okay with the results with 4 digits after the decimal place
 
 # TODO: check that this is valid rounding; use case_when if certain nutrients have more sig figs, or if its dif for dif programs
 
