@@ -105,14 +105,14 @@ fp_tp <- abs_nutrient_path("Tidal Parr_Data_Final.csv")
 
 df_tp <- read_csv(fp_tp) #read in data file
 
-#rm(fp_tp) #remove file paths
+rm(fp_tp) #remove file paths
 ```
 
 Check/Format Data
 
 ```{r}
 unique(df_tp$Matrix) #only shows Water, Natural, but also has NA's... why? 
-df_tp %>% filter(is.na(Matrix)) %>% View()
+#df_tp %>% filter(is.na(Matrix)) %>% View()
 #looks like a few blanks and random lines with stuff we don't want. 
 #filtering to remove rows with NA's for results (below) should fix this. 
 
@@ -142,12 +142,12 @@ Check DateTimes
 
 ```{r}
 # any missing dates?
-df_tp_final %>% filter(is.na(Date_Time))
+#df_tp_final %>% filter(is.na(Date_Time)) %>% View()
 
 # no missing dates
 
 # any missing times?
-df_tp_final %>% filter(format(Date_Time, '%H:%M:%S') == '00:00:00')
+#df_tp_final %>% filter(format(Date_Time, '%H:%M:%S') == '00:00:00') %>% View()
 
 #no missing date times
 ```
@@ -197,7 +197,7 @@ Check/Format Data
 unique(df_om$Matrix) #only shows Water, Natural
 unique(df_om$`Sample Type`) #only shows Normal Samples
 unique(df_om$Analyte) #no other analytes present besides what we want
-df_om %>% filter(is.na(Matrix)) %>% View()
+#df_om %>% filter(is.na(Matrix)) %>% View()
 #just junk columns left over at the end.
 
 unique(df_om$`Lab Dup`) #still some lab dups in there
@@ -216,6 +216,7 @@ unique(df_om_final$`Sample Type`)
 unique(df_om_final$Analyte) 
 unique(df_om_final$`Lab Dup`)
 
+
 rm(df_om, df_om_new) #remove intermediate data frames
 ```
 
@@ -223,12 +224,12 @@ Check DateTimes
 
 ```{r}
 # any missing dates?
-df_om_final %>% filter(is.na(Date_Time))
+#df_om_final %>% filter(is.na(Date_Time)) %>% View()
 
 # any missing times?
-df_om_final %>%
-  filter(format(Date_Time, '%H:%M:%S') == '00:00:00') %>%
-  distinct(`Date_Time`,`Sample Code`)
+#df_om_final %>%
+  #filter(format(Date_Time, '%H:%M:%S') == '00:00:00') %>%
+  #distinct(`Date_Time`,`Sample Code`) %>% View()
 
 # a few missing times
 # TODO: follow up? or is it fine?
@@ -267,9 +268,9 @@ rm(df_ndfs) #remove intermediate data frames
 Update Liberty Island station
 
 ```{r}
-df_dise_ndfs_final %>% distinct(`Short Station Name`, `Station Number`)
+#df_dise_ndfs_final %>% distinct(`Short Station Name`, `Station Number`) %>% View()
 
-#DISE NDFS and WQA have the same coordinates but slightly different names for South Tip at Liberty Island - use WQA's station name and number
+#DISE NDFS and WQA have the same coordinates but slightly different names for South Tip at Liberty Island - use WQA's station name and number (confirmed this is okay with data contacts)
 
 df_dise_ndfs_final <- df_dise_ndfs_final %>% 
   # change to the WQA station number
@@ -285,12 +286,12 @@ Check DateTimes
 
 ```{r}
 # any missing dates?
-df_dise_ndfs_final %>% filter(is.na(Date_Time))
+#df_dise_ndfs_final %>% filter(is.na(Date_Time)) %>% View()
 
 # any missing times?
-df_dise_ndfs_final %>%
-  filter(format(Date_Time, '%H:%M:%S') == '00:00:00') %>%
-  distinct(`Date_Time`,`Sample Code`)
+#df_dise_ndfs_final %>%
+  #filter(format(Date_Time, '%H:%M:%S') == '00:00:00') %>%
+  #distinct(`Date_Time`,`Sample Code`) %>% View()
 ```
 
 ### 4 - NCRO
@@ -394,12 +395,12 @@ Check DateTimes
 
 ```{r}
 # any missing dates?
-df_ncro_final %>% filter(is.na(Date_Time))
+#df_ncro_final %>% filter(is.na(Date_Time)) %>% View()
 
 # any missing times?
-df_ncro_final %>%
-  filter(format(Date_Time, '%H:%M:%S') == '00:00:00') %>%
-  distinct(`Date_Time`,`Sample Code`)
+#df_ncro_final %>%
+  #filter(format(Date_Time, '%H:%M:%S') == '00:00:00') %>%
+  #distinct(`Date_Time`,`Sample Code`) %>% View()
 ```
 
 ### 5 - AEU (WDL)
@@ -445,12 +446,12 @@ Check DateTimes
 
 ```{r}
 # any missing dates?
-df_aeu_wdl_final %>% filter(is.na(Date_Time))
+#df_aeu_wdl_final %>% filter(is.na(Date_Time)) %>% View()
 
 # any missing times?
-df_aeu_wdl_final %>%
-  filter(format(Date_Time, '%H:%M:%S') == '00:00:00') %>%
-  distinct(`Date_Time`,`Sample Code`)
+#df_aeu_wdl_final %>%
+  #filter(format(Date_Time, '%H:%M:%S') == '00:00:00') %>%
+  #distinct(`Date_Time`,`Sample Code`) %>% View()
 ```
 
 ### 6 - WQA
@@ -487,12 +488,12 @@ Check DateTimes
 
 ```{r}
 # any missing dates?
-df_wqa_final %>% filter(is.na(Date_Time))
+#df_wqa_final %>% filter(is.na(Date_Time)) %>% View()
 
 # any missing times?
-df_wqa_final %>%
-  filter(format(Date_Time, '%H:%M:%S') == '00:00:00') %>%
-  distinct(`Date_Time`,`Sample Code`)
+#df_wqa_final %>%
+  #filter(format(Date_Time, '%H:%M:%S') == '00:00:00') %>%
+  #distinct(`Date_Time`,`Sample Code`) %>% View()
 # a few missing times
 ```
 
@@ -767,7 +768,7 @@ df_methods <- df_methods %>%
 df_aeu_comb <- left_join(df_aeu_comb, df_methods, by = "Analyte") #use left join to add methods to EDI data based on Analyte
 
 # double check no NAs
-df_aeu_comb %>% filter(is.na('Method'))
+#df_aeu_comb %>% filter(is.na('Method')) %>% View()
 ```
 
 Add WDL station numbers to data (need this to get lat/longs added later)
@@ -784,7 +785,7 @@ df_aeu_comb <- df_aeu_comb %>%
   rename("Station Number" = Station_Number) #rename the station number column to match the WDL data
 
 # double check no NAs
-df_aeu_comb %>% filter(is.na('Station Number'))
+#df_aeu_comb %>% filter(is.na('Station Number')) %>% View()
 
 rm(df_aeu_station_numbers)
 ```
@@ -846,7 +847,7 @@ df_aeu_edi_final <- df_aeu_comb %>%
 
 range(df_aeu_edi_final$Date_Time) #confirm data is from 2013-2021
 
-rm(df_aeu_comb, df_aeu_wdl, df_aeu_edi) #remove intermediate data frames
+rm(df_aeu_comb, df_aeu_wdl, df_aeu_edi, df_aeu_new) #remove intermediate data frames
 ```
 
 ### 2 - DEMP
@@ -860,7 +861,7 @@ df_demp <- read_csv(fp_demp)
 fp_latlong <- abs_nutrient_path("DEMP_LSZ_LatLong.csv")
 df_latlong <- read_csv(fp_latlong)
 
-#rm(fp_demp, fp_latlong) #remove file paths
+rm(fp_demp, fp_latlong) #remove file paths
 ```
 
 Check data
@@ -921,10 +922,10 @@ df_demp_methods <- df_demp_methods %>%
   )
 
 # confirm the method names are the same as those used in other data sets
-df_methods %>% 
-  full_join(df_demp_methods %>% distinct(Analyte, Method), keep = TRUE) %>% 
-  drop_na(Analyte.y) %>% 
-  arrange(Analyte.y)
+#df_methods %>% 
+  #full_join(df_demp_methods %>% distinct(Analyte, Method), keep = TRUE) %>% 
+  #drop_na(Analyte.y) %>% 
+  #arrange(Analyte.y) %>% View()
 # There are a few additional methods in the DEMP dataset not found in the others - not sure if this matters
 ```
 
@@ -1025,12 +1026,12 @@ df_frp_final <- df_frp_new %>%
 #missing lab dups and description column, so should probably combine the FRP data after lab dups have been filtered out of WDL data
 
 # check no NA Date_Time
-df_frp_final %>% filter(is.na(Date_Time))
+#df_frp_final %>% filter(is.na(Date_Time)) %>% View()
 
 # any missing times?
-df_frp_final %>%
-  filter(format(Date_Time, '%H:%M:%S') == '00:00:00') %>%
-  distinct(`Date_Time`,`Sample Code`)
+#df_frp_final %>%
+  #filter(format(Date_Time, '%H:%M:%S') == '00:00:00') %>%
+  #distinct(`Date_Time`,`Sample Code`) %>% View()
 
 # TODO: quite a few, but fine?
 
@@ -1187,6 +1188,24 @@ df_nutrients_WDL <- df_nutrients_WDL %>%
          .default = Result)) %>% #otherwise leave the result as is
   select(-Result) %>% #remove the old result column
   rename(Result = result2) #rename new result column
+
+#deal with O&M issue where results are 0, but should be ND (contain J flag, which means MDL < result < RL)
+
+#first look at the sample with results = 0
+# df_nutrients_WDL %>%
+#   filter(Result == 0) %>%
+#   View()
+
+df_nutrients_WDL <- df_nutrients_WDL %>%
+  mutate(Detection_Condition = case_when((Result == 0) ~ "Not Detected", #when a result is 0, change the detection condition to "not detected"
+         .default = Detection_Condition)) %>% #otherwise leave the detection column as is
+  mutate(Result = case_when((Result == 0) ~ NA, #when a result is 0, change to NA
+         .default = Result)) #otherwise leave result as is
+
+#confirm the J flags were converted to NA, Not Detected
+df_nutrients_WDL %>%
+  filter(Notes == "J") %>%
+  View()
 ```
 
 ### Add AEU Data (Non-WDL)
@@ -1318,7 +1337,7 @@ Check units
 # this works.
 df_nutrients_comb %>% 
   distinct(Analyte, Method, Units) %>% 
-  arrange(Analyte, Method, Units)
+  arrange(Analyte, Method, Units) %>% View()
 
 # #dissolved ammonia
 # df_ammonia <- df_nutrients_comb %>%
@@ -1413,7 +1432,7 @@ df_nutrients_comb <- df_nutrients_comb %>%
     Units = case_match(
       Analyte,
       "Dissolved Ammonia" ~ "mg/L as N",
-      "Dissolved Nitrate" ~ "mg/L", # TODO (DB): not sure if this is correct, should it be mg/L as N?
+      "Dissolved Nitrate" ~ "mg/L as N", # TODO (DB): not sure if this is correct, should it be mg/L as N? - MB: yes, changed to as N
       "Dissolved Nitrate + Nitrite" ~ "mg/L as N",
       "Dissolved Organic Nitrogen" ~ "mg/L as N",
       "Dissolved ortho-Phosphate" ~ "mg/L as P",
@@ -1503,9 +1522,9 @@ quick_plot <- ggplot(df_nutrients_final, aes(x = Date_Time, y = Result, color= P
 plot(quick_plot)
 
 #found extreme value of 129 mg/L for dissolved nitrate + nitrite collected by O&M (SWP Routine Monitoring) on 11/18/2014
-df_nutrients_final %>% 
-  arrange(desc(Result)) %>% 
-  View()
+# df_nutrients_final %>% 
+#   arrange(desc(Result)) %>% 
+#   View()
 ```
 
 ### Data Checks/Cleaning
@@ -1515,16 +1534,18 @@ Check ranges
 ```{r}
 range(na.omit(df_nutrients_final$Result))
 
-# The min of the results is zero. There shouldn't be any values equal to zero in this dataset. 
+# The min of the results is zero. There shouldn't be any values equal to zero in this dataset. - MB: fixed above in Non-Detects section
 # Investigate this further
-df_nutrients_final %>% 
-  filter(Result == 0) %>% 
-  View()
+# df_nutrients_final %>% 
+#   filter(Result == 0) %>% 
+#   View()
 # There are 7 records collected at Lake Oroville that have values equal to zero. They appear to be
 # analyzed by Test America and are flagged with "J". Additionally, the 4 TKN records have notes that
 # state "Field data only".
 # TODO (DB): The 4 TKN records should most likely be removed, and the remaining 3 records may need
 # to be converted to Not Detected. Need to investigate this further.
+
+#Morgan: confirmed with data contact, these 7 records were analyzed at Test America, but have a J flag (<RL, >MDL) - these should be non-detects
 
 df_nutrients_clean <- df_nutrients_final %>%
   filter(Result < 50 | is.na(Result)) 
@@ -1552,21 +1573,22 @@ plot(quick_plot)
 ### Check for NA values
 
 ```{r}
-df_nutrients_clean %>% 
-  summarize(across(everything(), \(x) sum(is.na(x)))) %>% 
-  pivot_longer(everything())
+# df_nutrients_clean %>% 
+#   summarize(across(everything(), \(x) sum(is.na(x)))) %>% 
+#   pivot_longer(everything()) %>% view()
 
 # Station_Number, Latitude, Longitude, Result, Reporting_Limit, and Notes columns all have some NA
 # values. Most of these are expected, but I'm not sure about Station_Number.
+
 # Which records have NA values for Station_Number?
-df_nutrients_clean %>% 
-  filter(is.na(Station_Number)) %>% 
-  count(Project, Station_Name) %>% 
-  arrange(Project, Station_Name) %>% 
-  print(n = Inf)
+# df_nutrients_clean %>% 
+#   filter(is.na(Station_Number)) %>% 
+#   count(Project, Station_Name) %>% 
+#   arrange(Project, Station_Name) %>% 
+#   print(n = Inf)
 
 # Just the LSZ stations from DEMP, and the FRP records have NA values for the Station_Number. 
-# TODO (DB): is this okay?
+# TODO (DB): is this okay? MB: yes, it's fine since they are "floating" stations and don't have broad water body numbers
 ```
 
 ### Check duplicate Station/Date/Time/Analyte
@@ -1709,6 +1731,16 @@ df_times %>%
 # the records without collection times. Currently someone can misinterpret these samples as being
 # collected at midnight.
 
+#convert missing times to NAs and add a date column
+df_nutrients_clean <- df_nutrients_clean %>%
+  mutate(Date = date(Date_Time)) %>%
+  mutate(Hour = hour(Date_Time), Minute = minute(Date_Time), Second = second(Date_Time)) %>%
+  mutate(time_sum = Hour + Minute + Second) %>%
+  mutate(date_test = case_when((time_sum == 0) ~ NA,  #if the time is 0:00, change it to NA
+                    .default = Date_Time)) %>%
+  select(-c(Hour, Minute, Second, time_sum, Date_Time)) %>%
+  rename(Date_Time = date_test)
+
 # Inspect collection times for oddities
 df_times %>% 
   # Remove samples collected at midnight
@@ -1724,6 +1756,10 @@ df_times %>%
 ```{r}
 # Arrange data in an more organized way before export
 df_nutrients_exp <- df_nutrients_clean %>% arrange(Project, Date_Time, Analyte)
+
+#Reorder columns
+df_nutrients_exp <- df_nutrients_exp %>%
+  select(c("Project", "Station_Name", "Station_Number", "Latitude", "Longitude", "Sample_Code", "Date", "Date_Time", "Analyte", "Detection_Condition", "Result", "Units", "Reporting_Limit", "Method", "Notes"))
 
 fp_output_discrete <- abs_nutrient_path("../EDI Data Files/nutrient_data_discrete.csv")
 df_nutrients_exp %>% 
@@ -1857,7 +1893,7 @@ plot(quick_plot)
 ```{r}
 range(df_continuous_final$Date_Time) #check time frame
 
-range(df_continuous_final$Result) #found some negative values and really high values - (still need to confirm with data contact)
+range(df_continuous_final$Result) #found some negative values and really high values - confirmed these are not real by data contact
 
 df_continuous_clean <- df_continuous_final %>%
   filter(Result < 60 & Result > 0)
