@@ -1,5 +1,26 @@
-# Process data for models
+---
+title: "Process Input Data for Models"
+author: "Dave Bosworth"
+date: today
+date-format: long
+format:
+  html:
+    toc: true
+    toc-expand: 2
+    code-fold: show
+    code-tools: true
+execute: 
+  message: false
+  warning: false
+---
 
+# Purpose
+
+Prepare input data for models used in the DWR nutrient synthesis project.
+
+# Global Code
+
+```{r load packages}
 # Load packages
 library(tidyverse)
 library(rlang)
@@ -21,10 +42,16 @@ library(conflicted)
 
 # Declare package conflict preferences
 conflicts_prefer(dplyr::filter(), hms::hms())
+```
 
+```{r session info}
+# Run session info to display package versions
+devtools::session_info()
+```
 
-# Functions -----------------------------------------------------------------------------------
+Create functions used in this document:
 
+```{r functions}
 # Get data entity names for specified EDI ID
 get_edi_data_entities <- function(edi_id) {
   df_data_ent <- read_data_entity_names(edi_id)
@@ -86,10 +113,11 @@ add_season <- function(df) {
     Season = factor(Season, levels = c("Winter", "Spring", "Summer", "Fall"))
   )
 }
+```
 
+Load globally-used data:
 
-# Globally used Data --------------------------------------------------------------------------
-
+```{r load global data}
 # Import region assignments
 df_regions <- read_csv(here("data/raw/region_assignments.csv"))
 
@@ -109,11 +137,14 @@ sf_delta <- R_EDSM_Subregions_Mahardja_FLOAT %>%
   # Add region assignments to the SubRegion shapefile
   left_join(df_regions, by = join_by(SubRegion)) %>% 
   relocate(Region, .after = SubRegion)
-  
+```
 
-# DWR integrated discrete nutrient data -------------------------------------------------------
+# DWR Integrated Discrete Nutrient Data
 
-# Import data set
+## Import Data
+
+```{r dwr nutr import data}
+# Import nutrient data set
 df_nutr <- readRDS(here("data/processed/nutrient_data_discrete.rds"))
 
 # Import phytoplankton data from FRP's EDI publication to assign lat-long coordinates to FRP's
@@ -130,7 +161,11 @@ df_frp_phyto_coord <- read_csv(str_subset(temp_files, edi_data_ent_sub)) %>%
     Longitude = mean(LongitudeStart),
     .by = Location
   )
+```
 
+## Prepare Data
+
+```{r dwr nutr prepare data}
 # Prepare data for aggregation
 df_nutr_c1 <- df_nutr %>% 
   # Add lat-long coordinates for FRP stations from the phytoplankton data set
@@ -147,7 +182,11 @@ df_nutr_c1 <- df_nutr %>%
   # Remove any data outside our subregions of interest
   filter(!is.na(SubRegion)) %>%
   st_drop_geometry()
-  
+```
+
+Remove various duplicated records so that there is only one sample per station-day.
+
+```{r dwr nutr rm dt dups}
 # Clean up duplicated records that share same Date_Time - it might be more appropriate to address
   # this in the nutrient data integration code. TODO: talk to Morgan about this
 df_nutr_dt_dups <- df_nutr_c1 %>% 
@@ -164,7 +203,9 @@ df_nutr_dt_dups_fixed <- df_nutr_dt_dups %>%
 df_nutr_c2 <- df_nutr_c1 %>% 
   anti_join(df_nutr_dt_dups) %>% 
   bind_rows(df_nutr_dt_dups_fixed)
+```
 
+```{r dwr nutr rm dups no dt}
 # Clean up duplicated records that share same Date and don't have a collection time
 df_nutr_dups_nodt <- df_nutr_c2 %>% 
   add_count(Project, Station_Name, Date, Analyte) %>% 
@@ -179,7 +220,9 @@ df_nutr_dups_nodt_fixed <- df_nutr_dups_nodt %>%
 df_nutr_c3 <- df_nutr_c2 %>% 
   anti_join(df_nutr_dups_nodt) %>% 
   bind_rows(df_nutr_dups_nodt_fixed)
+```
 
+```{r dwr nutr rm dups same day}
 # Filter data so that there is only one sample per station-day by choosing the data point closest 
   # to noon
 df_nutr_daily_dups <- df_nutr_c3 %>% 
@@ -204,7 +247,11 @@ df_nutr_daily_dups_fixed <- df_nutr_daily_dups %>%
 df_nutr_c4 <- df_nutr_c3 %>% 
   anti_join(df_nutr_daily_dups) %>% 
   bind_rows(df_nutr_daily_dups_fixed)
+```
 
+Replace values below the reporting limit with simulated values.
+
+```{r dwr nutr replace blw rl vals}
 # Replace values below the reporting limit with simulated values
 df_nutr_c5 <- df_nutr_c4 %>% 
   mutate(
@@ -218,7 +265,11 @@ df_nutr_c5 <- df_nutr_c4 %>%
   filter(!(Sign == "<" & Result > q95)) %>% 
   select(-q95) %>% 
   replace_blw_rl()
+```
 
+## Aggregate Data
+
+```{r dwr nutr calc monthly values}
 # Calculate Monthly-Regional averages
 df_nutr_avg_mo <- df_nutr_c5 %>% 
   mutate(
@@ -230,36 +281,9 @@ df_nutr_avg_mo <- df_nutr_c5 %>%
     Num_samples = n(),
     .by = c(Year, Month, Region, Analyte)
   )
+```
 
-# Sampling effort plots for each analyte
-ls_nutr_avg_mo_plt <- df_nutr_avg_mo %>% 
-  mutate(Month = month(Month, label = TRUE)) %>% 
-  complete(nesting(Year, Month), Region, Analyte) %>%
-  nest(.by = Analyte) %>% 
-  deframe() %>% 
-  imap(
-    \(x, idx) ggplot(data = x, aes(x = Year, y = Region, fill = Num_samples)) +
-      geom_tile() +
-      facet_wrap(vars(Month)) +
-      ggtitle(idx) +
-      scale_y_discrete(drop = FALSE) +
-      scale_x_continuous(
-        breaks = breaks_pretty(10), 
-        expand = expansion(mult = 0.02)
-      ) +
-      scale_fill_viridis_c(name = "Number of\nSamples", na.value = "transparent") +
-      theme_bw() +
-      theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
-  )
-
-ls_nutr_avg_mo_plt$`Dissolved Ammonia`
-ls_nutr_avg_mo_plt$`Dissolved Nitrate + Nitrite`
-ls_nutr_avg_mo_plt$`Dissolved Organic Nitrogen`
-ls_nutr_avg_mo_plt$`Dissolved ortho-Phosphate`
-ls_nutr_avg_mo_plt$`Total Kjeldahl Nitrogen`
-ls_nutr_avg_mo_plt$`Total Phosphorus`
-ls_nutr_avg_mo_plt$`Dissolved Nitrate`
-
+```{r dwr nutr calc seasonal values}
 # Further calculate Seasonal-Regional averages using Adjusted calendar year: December-November, with
   # December of the previous calendar year included with the following year
 df_nutr_avg_seas <- df_nutr_avg_mo %>% 
@@ -270,23 +294,9 @@ df_nutr_avg_seas <- df_nutr_avg_mo %>%
     Num_samples = sum(Num_samples),
     .by = c(YearAdj, Season, Region, Analyte)
   )
+```
 
-# Sampling effort plot
-df_nutr_avg_seas %>% ggplot(aes(x = YearAdj, y = Region, fill = Num_samples)) +
-  geom_tile() +
-  facet_grid(
-    rows = vars(Analyte), 
-    cols = vars(Season), 
-    labeller = label_wrap_gen(width = 20)
-  ) +
-  scale_x_continuous(
-    breaks = breaks_pretty(10), 
-    expand = expansion(mult = 0.02)
-  ) +
-  scale_fill_viridis_c(name = "Number of\nSamples") +
-  theme_bw() +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
-
+```{r dwr nutr conv monthly seasonal to wide}
 # Convert both sets of averages to wide format
 ls_nutr_avg_wide <- lst(df_nutr_avg_mo, df_nutr_avg_seas) %>% 
   map(
@@ -306,13 +316,81 @@ ls_nutr_avg_wide <- lst(df_nutr_avg_mo, df_nutr_avg_seas) %>%
     select(-Num_samples) %>% 
     pivot_wider(names_from = Analyte, values_from = Result)
   )
+```
 
-# Look for NA values in each set of averages
-ls_nutr_avg_wide %>% map(\(x) summarize(x, across(everything(), \(y) sum(is.na(y)))))
+## Sampling Effort Plots
+
+### Monthly Values
+
+```{r dwr nutr samp effort monthly values}
+ls_nutr_avg_mo_plt <- df_nutr_avg_mo %>% 
+  mutate(Month = month(Month, label = TRUE)) %>% 
+  complete(nesting(Year, Month), Region, Analyte) %>%
+  nest(.by = Analyte) %>% 
+  deframe() %>% 
+  imap(
+    \(x, idx) ggplot(data = x, aes(x = Year, y = Region, fill = Num_samples)) +
+      geom_tile() +
+      facet_wrap(vars(Month)) +
+      ggtitle(idx) +
+      scale_y_discrete(drop = FALSE) +
+      scale_x_continuous(
+        breaks = breaks_pretty(10), 
+        expand = expansion(mult = 0.02)
+      ) +
+      scale_fill_viridis_c(name = "Number of\nSamples", na.value = "transparent") +
+      theme_bw() +
+      theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+  )
+```
+
+::: {.panel-tabset}
+
+```{r dwr nutr print samp effort monthly values}
+#| echo: false
+#| results: asis
+#| fig-width: 8
+#| fig-height: 6
+
+for (i in 1:length(ls_nutr_avg_mo_plt)) {
+  # Create subheadings for each Parameter
+  cat("#### ", names(ls_nutr_avg_mo_plt[i]), "\n\n")
+  # Print plot
+  print(ls_nutr_avg_mo_plt[[i]])
+  cat("\n\n")
+}
+```
+
+:::
+
+### Seasonal Values
+
+```{r dwr nutr samp effort seasonal values}
+#| fig-width: 8
+#| fig-height: 9
+
+df_nutr_avg_seas %>% ggplot(aes(x = YearAdj, y = Region, fill = Num_samples)) +
+  geom_tile() +
+  facet_grid(
+    rows = vars(Analyte), 
+    cols = vars(Season), 
+    labeller = label_wrap_gen(width = 20)
+  ) +
+  scale_x_continuous(
+    breaks = breaks_pretty(10), 
+    expand = expansion(mult = 0.02)
+  ) +
+  scale_fill_viridis_c(name = "Number of\nSamples") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+```
 
 
-# Integrated discrete WQ data from discretewq -------------------------------------------------
+# Integrated Discrete WQ Data from discretewq
 
+## Import Data
+
+```{r discretewq import data}
 # Import full integrated data set from discretewq
 df_dwq <- wq(
   Sources = c(
@@ -320,14 +398,18 @@ df_dwq <- wq(
     "Suisun", "USBR", "USGS_CAWSC", "USGS_SFBS", "YBFMP"
   )
 )
+```
 
-# Only keep Water Temperature, Salinity, Turbidity, DO, pH, Chlorophyll a, and Microcystis visual
-  # index data from discretewq data set
+## Prepare Data
+
+```{r discretewq prepare data}
+# Define water quality parameters to keep from discretewq
 dwq_param <- c(
   "Microcystis", "Temperature", "Salinity", "DissolvedOxygen", "pH", "TurbidityNTU",
   "TurbidityFNU", "Chlorophyll"
 )
 
+# Prepare data for aggregation
 df_dwq_c1 <- df_dwq %>% 
   select(
     Source, Station, Latitude, Longitude, Date, Datetime, Year, Month, 
@@ -364,8 +446,11 @@ df_dwq_c2 <- df_dwq_c1 %>%
   ) %>% 
   drop_na(Result) %>% 
   replace_na(list(Sign = "="))
-  
-# Consolidate Turbidity parameters and prefer TurbidityNTU when both NTU and FNU were collected
+```
+
+Consolidate Turbidity parameters and prefer TurbidityNTU when both NTU and FNU were collected.
+
+```{r discretewq consolidate turbidity}
 df_dwq_c3 <- df_dwq_c2 %>% 
   mutate(Parameter2 = if_else(str_detect(Parameter, "^Turbidity"), "Turbidity", Parameter))
 
@@ -382,7 +467,11 @@ df_dwq_c4 <- df_dwq_c3 %>%
   bind_rows(df_dwq_turb_dups_fixed) %>% 
   select(-Parameter) %>% 
   rename(Parameter = Parameter2)
+```
 
+Remove various duplicated records so that there is only one sample per station-day.
+
+```{r discretewq rm dt dups}
 # Clean up the duplicated records that share same Datetime from EDSM
 df_dwq_dt_dups <- df_dwq_c4 %>% 
   add_count(Source, Station, Datetime, Parameter) %>% 
@@ -395,7 +484,9 @@ df_dwq_dt_dups_fixed <- df_dwq_dt_dups %>%
 df_dwq_c5 <- df_dwq_c4 %>% 
   anti_join(df_dwq_dt_dups) %>% 
   bind_rows(df_dwq_dt_dups_fixed)
+```
 
+```{r discretewq rm dups same day}
 # Filter data so that there is only one sample per station-day by choosing the data point closest 
   # to noon
 df_dwq_daily_dups <- df_dwq_c5 %>% 
@@ -420,8 +511,11 @@ df_dwq_daily_dups_fixed <- df_dwq_daily_dups %>%
 df_dwq_c6 <- df_dwq_c5 %>% 
   anti_join(df_dwq_daily_dups) %>% 
   bind_rows(df_dwq_daily_dups_fixed)
+```
 
-# Remove values that are out of range of reasonable limits for the parameter
+Remove values that are out of range of reasonable limits for the parameter
+
+```{r discretewq rm outliers}
 df_dwq_c7 <- df_dwq_c6 %>% 
   # Temperature value of 2.9 collected on 8/12/2014 in Suisun Marsh
   filter(!(Parameter == "Temperature" & Result < 3)) %>% 
@@ -435,7 +529,11 @@ df_dwq_c7 <- df_dwq_c6 %>%
   filter(!(Parameter == "Turbidity" & Result > 1000)) %>% 
   # A few Chlorophyll values less than or equal to zero
   filter(!(Parameter == "Chlorophyll" & Result <= 0))
+```
 
+## Aggregate Data
+
+```{r discretewq calc monthly values}
 # Calculate Monthly-Regional averages
 df_dwq_avg_mo <- df_dwq_c7 %>% 
   # Convert pH values to H+ concentration before averaging
@@ -447,8 +545,41 @@ df_dwq_avg_mo <- df_dwq_c7 %>%
     Num_samples = n(),
     .by = c(Year, Month, Region, Parameter)
   )
+```
 
-# Sampling effort plots for each parameter
+```{r discretewq calc seasonal values}
+# Further calculate Seasonal-Regional averages using Adjusted calendar year: December-November, with
+  # December of the previous calendar year included with the following year
+df_dwq_avg_seas <- df_dwq_avg_mo %>% 
+  mutate(YearAdj = if_else(Month == 12, Year + 1, Year)) %>% 
+  add_season() %>% 
+  summarize(
+    Result = mean(Result),
+    Num_samples = sum(Num_samples),
+    .by = c(YearAdj, Season, Region, Parameter)
+  )
+```
+
+```{r discretewq conv monthly seasonal to wide}
+# Convert both sets of averages to wide format
+ls_dwq_avg_wide <- lst(df_dwq_avg_mo, df_dwq_avg_seas) %>% 
+  map(
+    \(x) select(x, -Num_samples) %>% 
+      pivot_wider(names_from = Parameter, values_from = Result) %>% 
+      mutate(
+        # Round Microcystis to nearest whole number
+        Microcystis = round(Microcystis),
+        # Convert average H+ concentration to average pH
+        pH = -log10(pH)
+      )
+  )
+```
+
+## Sampling Effort Plots
+
+### Monthly Values
+
+```{r discretewq samp effort monthly values}
 ls_dwq_avg_mo_plt <- df_dwq_avg_mo %>% 
   filter(Year %in% 2010:2024) %>% 
   mutate(Month = month(Month, label = TRUE)) %>% 
@@ -469,27 +600,33 @@ ls_dwq_avg_mo_plt <- df_dwq_avg_mo %>%
       theme_bw() +
       theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
   )
+```
 
-ls_dwq_avg_mo_plt$Chlorophyll
-ls_dwq_avg_mo_plt$DissolvedOxygen
-ls_dwq_avg_mo_plt$Microcystis
-ls_dwq_avg_mo_plt$pH
-ls_dwq_avg_mo_plt$Salinity
-ls_dwq_avg_mo_plt$Temperature
-ls_dwq_avg_mo_plt$Turbidity
+::: {.panel-tabset}
 
-# Further calculate Seasonal-Regional averages using Adjusted calendar year: December-November, with
-  # December of the previous calendar year included with the following year
-df_dwq_avg_seas <- df_dwq_avg_mo %>% 
-  mutate(YearAdj = if_else(Month == 12, Year + 1, Year)) %>% 
-  add_season() %>% 
-  summarize(
-    Result = mean(Result),
-    Num_samples = sum(Num_samples),
-    .by = c(YearAdj, Season, Region, Parameter)
-  )
+```{r discretewq print samp effort monthly values}
+#| echo: false
+#| results: asis
+#| fig-width: 8
+#| fig-height: 6
 
-# Sampling effort plot
+for (i in 1:length(ls_dwq_avg_mo_plt)) {
+  # Create subheadings for each Parameter
+  cat("#### ", names(ls_dwq_avg_mo_plt[i]), "\n\n")
+  # Print plot
+  print(ls_dwq_avg_mo_plt[[i]])
+  cat("\n\n")
+}
+```
+
+:::
+
+### Seasonal Values
+
+```{r discretewq samp effort seasonal values}
+#| fig-width: 8
+#| fig-height: 9
+
 df_dwq_avg_seas %>% 
   filter(YearAdj %in% 2010:2024) %>% 
   ggplot(aes(x = YearAdj, y = Region, fill = Num_samples)) +
@@ -502,34 +639,50 @@ df_dwq_avg_seas %>%
     scale_fill_viridis_c(name = "Number of\nSamples") +
     theme_bw() +
     theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
-
-# Convert both sets of averages to wide format
-ls_dwq_avg_wide <- lst(df_dwq_avg_mo, df_dwq_avg_seas) %>% 
-  map(
-    \(x) select(x, -Num_samples) %>% 
-      pivot_wider(names_from = Parameter, values_from = Result) %>% 
-      mutate(
-        # Round Microcystis to nearest whole number
-        Microcystis = round(Microcystis),
-        # Convert average H+ concentration to average pH
-        pH = -log10(pH)
-      )
-  )
-
-# Look for NA values in each set of averages
-ls_dwq_avg_wide %>% map(\(x) summarize(x, across(everything(), \(y) sum(is.na(y)))))
+```
 
 
-# DAYFLOW -------------------------------------------------------------------------------------
+# DAYFLOW
 
-# Import DAYFLOW data
-# Data downloaded from CNRA portal: https://data.cnra.ca.gov/dataset/dayflow
+## Download Data
+
+Download data from CNRA data portal: <https://data.cnra.ca.gov/dataset/dayflow>
+
+This code chunk is set to not evaluate upon rendering and is only here for transparency sake. Set eval to `TRUE` to run the download data code if desired.
+
+```{r dayflow download data}
+#| eval: false
+
+# Download data from URL
+dayflow_1997_2023 <- read_csv(
+  "https://data.cnra.ca.gov/dataset/06ee2016-b138-47d7-9e85-f46fae674536/resource/21c377fe-53b8-4bd6-9e1f-2025221be095/download/dayflow-results-1997-2023.csv"
+)
+dayflow_2024 <- read_csv(
+  "https://data.cnra.ca.gov/dataset/06ee2016-b138-47d7-9e85-f46fae674536/resource/6a7cb172-fb16-480d-9f4f-0322548fee83/download/dayflowcalculations2024.csv"
+)
+
+# Save local copies of data
+lst(dayflow_1997_2023, dayflow_2024) %>%
+  iwalk(\(x, idx) write_csv(x, file = here("data/raw", paste0(idx, ".csv"))))
+
+rm(dayflow_1997_2023, dayflow_2024)
+```
+
+## Import Data
+
+```{r dayflow import data}
+# Define file paths of DAYFLOW data
 fp_dayflow <- dir_ls(here("data/raw"), regexp = "dayflow.+\\.csv$")
 
+# Import data
 ls_dayflow <- fp_dayflow %>% 
   map(read_csv) %>% 
   set_names(\(x) str_extract(x, "(?<=raw/)dayflow.+(?=\\.csv)"))
+```
 
+## Prepare Data
+
+```{r dayflow prepare data}
 # Clean up and combine data
 df_dayflow <- ls_dayflow %>% 
   map_at("dayflow_1997_2023", \(x) mutate(x, Date = mdy(Date))) %>% 
@@ -538,7 +691,11 @@ df_dayflow <- ls_dayflow %>%
   mutate(Year = year(Date), Month = month(Date)) %>% 
   # Remove data prior to 2009 and after 2024
   filter(Year %in% 2009:2024)
+```
 
+## Aggregate Data
+
+```{r dayflow calc monthly values}
 # Calculate monthly totals
 df_dayflow_tot_mo <- df_dayflow %>% 
   summarize(
@@ -547,17 +704,21 @@ df_dayflow_tot_mo <- df_dayflow %>%
     Total_Inflow = sum(TOT),
     .by = c(Year, Month)
   )
-  
+```
+
+```{r dayflow calc seasonal values}
 # Further calculate seasonal totals using Adjusted calendar year: December-November, with December
   # of the previous calendar year included with the following year
 df_dayflow_tot_seas <- df_dayflow_tot_mo %>% 
   mutate(YearAdj = if_else(Month == 12, Year + 1, Year)) %>% 
   add_season() %>% 
   summarize(across(ends_with("Inflow"), sum), .by = c(YearAdj, Season))
+```
 
 
-# Combine Data --------------------------------------------------------------------------------
+# Combine All Data
 
+```{r combine monthly values}
 # Create data frame that contains all possible combinations of year, month, and region
 df_yr_mo_reg <- 
   expand_grid(
@@ -570,13 +731,6 @@ df_yr_mo_reg <-
   # Create Month-Year column
   mutate(MonthYear = paste(month(Month, label = TRUE), Year, sep = "-"), .before = Year)
 
-# Create data frame that contains all possible combinations of year, season, and region
-df_yr_seas_reg <- df_yr_mo_reg %>% 
-  add_season() %>% 
-  distinct(YearAdj = Year, Season, Region) %>% 
-  # Remove Summer 2024 because of low sampling
-  filter(!(YearAdj == 2024 & Season == "Summer"))
-
 # Combine all Monthly-Regional averages (or monthly totals) into one data frame
 monthly_values <- 
   list(
@@ -586,6 +740,15 @@ monthly_values <-
     df_dayflow_tot_mo
   ) %>% 
   reduce(left_join)
+```
+
+```{r combine seasonal values}
+# Create data frame that contains all possible combinations of year, season, and region
+df_yr_seas_reg <- df_yr_mo_reg %>% 
+  add_season() %>% 
+  distinct(YearAdj = Year, Season, Region) %>% 
+  # Remove Summer 2024 because of low sampling
+  filter(!(YearAdj == 2024 & Season == "Summer"))
 
 # Combine all Seasonal-Regional averages (or seasonal totals) into one data frame
 seasonal_values <- 
@@ -596,10 +759,14 @@ seasonal_values <-
     df_dayflow_tot_seas
   ) %>% 
   reduce(left_join)
+```
 
 
-# Export Processed Data -----------------------------------------------------------------------
+# Export Processed Data
 
+Export the monthly and seasonal data both as .csv and .rds files for the models.
+
+```{r export final data}
 ls_final_data <- lst(monthly_values, seasonal_values)
 fp_processed <- here("data/processed")
 
@@ -610,4 +777,5 @@ ls_final_data %>%
 # Export data as rds files
 ls_final_data %>% 
   iwalk(\(x, idx) saveRDS(x, file = paste0(fp_processed, "/", idx, ".rds")))
+```
 
