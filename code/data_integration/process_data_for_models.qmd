@@ -35,6 +35,7 @@ library(deltamapr)
 # devtools::install_github("InteragencyEcologicalProgram/discretewq", ref = "b68425c2eca88015b5e01ae6029f84b2a3af2ea8")
 library(discretewq)
 library(sf)
+library(mapview)
 library(EDIutils)
 library(fs)
 library(here)
@@ -121,7 +122,7 @@ Load globally-used data:
 # Import region assignments
 df_regions <- read_csv(here("data/raw/region_assignments.csv"))
 
-# Load Delta shapefile from Brian and only keep SubRegions east of Carquinez Straight
+# Load Delta EDSM shapefile and only keep SubRegions east of Carquinez Straight
 sf_delta <- R_EDSM_Subregions_Mahardja_FLOAT %>% 
   filter(
     !SubRegion %in% c(
@@ -137,6 +138,14 @@ sf_delta <- R_EDSM_Subregions_Mahardja_FLOAT %>%
   # Add region assignments to the SubRegion shapefile
   left_join(df_regions, by = join_by(SubRegion)) %>% 
   relocate(Region, .after = SubRegion)
+```
+
+# Regions Map
+
+Create map showing SubRegions and Regions used to process the data.
+
+```{r}
+mapview(sf_delta, zcol = "Region", alpha.regions = 0.5)
 ```
 
 # DWR Integrated Discrete Nutrient Data
