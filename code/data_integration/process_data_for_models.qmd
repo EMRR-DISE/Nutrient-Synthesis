@@ -773,7 +773,7 @@ seasonal_values <-
 
 # Export Processed Data
 
-Export the monthly and seasonal data both as .csv and .rds files for the models.
+Export the monthly and seasonal data both as .csv and .rds files for the models. Also export the Delta SubRegions and Regions shapefile.
 
 ```{r export final data}
 ls_final_data <- lst(monthly_values, seasonal_values)
@@ -786,5 +786,8 @@ ls_final_data %>%
 # Export data as rds files
 ls_final_data %>% 
   iwalk(\(x, idx) saveRDS(x, file = paste0(fp_processed, "/", idx, ".rds")))
+
+# Export Delta SubRegions/Regions shapefile
+sf_delta %>% write_sf(here("data/spatial/delta_subregions.shp"))
 ```
 
