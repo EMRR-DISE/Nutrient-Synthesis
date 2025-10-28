@@ -224,7 +224,7 @@ df_ncro <- read_csv(fp_ncro, guess_max = 30000)
 
 -Add project names
 ```{r}
-unique(df_ncro$`Short Station Name`)
+sort(unique(df_ncro$`Short Station Name`))
 unique(df_ncro$`Long Station Name`)
 
 #since all projects were exported from WDL in one file, we need to differentiate them based on station names
@@ -264,7 +264,7 @@ df_ncro_final <- df_ncro_new %>%
   filter(Analyte == "Dissolved Ammonia" | Analyte == "Dissolved Nitrate + Nitrite"| Analyte == "Dissolved Organic Nitrogen"| Analyte == "Dissolved ortho-Phosphate" | Analyte == "Dissolved Nitrate" | Analyte == "Total Phosphorus" | Analyte == "Total Kjeldahl Nitrogen") %>% #filter for the analytes we want
   select(c("Long Station Name", "Short Station Name", "Station Number", "Date_Time", "Sample Code", "Analyte", "Result", "Rpt Limit", "Units", "Method", "Lab Dup", "Sample Type", "Description", "Notes", Project)) %>% #remove unwanted rows
   filter(!(is.na(`Result`) | `Result` == "N.S.")) #get rid of rows with NA or NS in the result column
-
+table(df_ncro_final$Project)
 #rm(df_ncro, df_ndfs, df_ncro_new, df_sdtb, df_rs, df_edb)
 ```
 
@@ -740,7 +740,7 @@ df_frp_final <- df_frp_new %>%
 df_nutrients_WDL <- bind_rows(df_om_final, df_tp_final, df_dise_ndfs_final, df_ncro_final, df_aeu_wdl_final, df_wqa_final) #combine WDL data sets
 
 unique(df_nutrients_WDL$Project) #confirm all data sets were combined
-
+table(df_nutrients_WDL$Project)
 #rm(df_om_final, df_tp_final, df_dise_ndfs_final, df_ncro_final, df_aeu_wdl_final, df_wqa_final) #remove individual WDL data frames
 ```
 

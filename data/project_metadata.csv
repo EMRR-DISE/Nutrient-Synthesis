@@ -1,0 +1,14 @@
+﻿Project Name,Project Type,Data Type,Data Contact,Start Year,End Year,Sampling Frequency,Sample Depth,EDI Link,Notes
+EMP Discrete Water Quality Monitoring,Long Term Monitoring,Discrete,Craig Stuart,2010,Ongoing,Monthly,1 meter,Data Portal - Data Package Summary | Environmental Data Initiative (EDI),
+SWP Routine Monitoring,Long Term Monitoring,Discrete,Daniel Wisheropp,2010,Ongoing,Monthly,Typically 1 meter,,
+Yolo Bypass Fish Monitoring Program,Long Term Monitoring,Discrete,Mackenzie Miner,2013,Ongoing,"Weekly, Every Two Weeks",1 meter,https://doi.org/10.6073/pasta/5791d7eaca09fb9471c5589c66f86863,
+DISE NDFS Study,Short Term Study,Discrete,Eric Holmes,2014,2023,"Weekly, Every Two Weeks",1 meter,,Sampling conducted only in summer and fall months. Some sites have multiple aliases.
+South Delta Temporary Barriers Project,Long Term Monitoring,Discrete,"Elena Huynh, David Colvin, Katherine Cabras, Brooke Rosenow",2010,Ongoing,Monthly,1 meter,https://portal.edirepository.org/nis/mapbrowse?packageid=edi.731.14,
+Emergency Drought Barrier,Long Term Monitoring,Discrete,"Tyler Salman, Jared Frantzich, David Colvin",2014,2023,Monthly,1 meter,https://portal.edirepository.org/nis/mapbrowse?packageid=edi.731.14,
+Rock Slough Water Quality Monitoring Program,Long Term Monitoring,Discrete,"Jared Frantzich, Logan Davis",2011,2024,Monthly,1 meter,https://portal.edirepository.org/nis/mapbrowse?packageid=edi.731.14,
+NCRO NDFS Study,Long Term Monitoring,Discrete,Logan Davis,2023,2024,Monthly,1 meter,,
+Fish Restoration Program,Long Term Monitoring,Discrete,"Christy Bowles, Amanda Maguire",2017,Ongoing,Annually to 3 times per year,0.1 meter,https://doi.org/10.6073/pasta/5a69a9f99ef1dc4177e2b26e9c4604a6 ,Sampling is not done at fixed stations- samples are distributed within each Location. 
+Tidal Parr Study,Short Term Study,Discrete,"Brett Harvey, Michelle Nelson",2019,2021,Seasonally,,,
+WQA Discrete Sampling and Special Studies,"Long Term Monitoring, Short Term Study",Discrete,"Kobe Carpenter, Vivian Klotz",2010,Ongoing,"Every Two Weeks, Monthly, Quarterly, Storm-based",Typically 1 meter,,
+WQA Real-Time Data and Forecasting,Long Term Monitoring,Continuous,Vivian Klotz,2010,Ongoing,Every Three to Four Hours,NA,,
+Continuous EMP SUNA Real-Time Monitoring,Long Term Monitoring,Continuous,Andrew Tran,2019,Ongoing,Every 15 Minutes,1 meter,,
