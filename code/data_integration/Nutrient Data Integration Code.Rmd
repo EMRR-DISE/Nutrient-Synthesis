@@ -898,7 +898,7 @@ Format columns
 
 ```{r}
 df_demp_new <- df_demp %>%
-  mutate(Date_Time = ymd_hms(`Observed DateTime`)) %>% #format date
+  mutate(Date_Time = ymd_hms(str_remove(`Observed DateTime`, "\\..+$"))) %>% #format date
   mutate(Detection_Condition = case_when(str_detect(`Lab: Detection Condition`, "NOT_DETECTED") ~ "Not Detected", #fix capitalization
          .default = "Detected")) %>% #otherwise say Detected
   select(c("Location ID", "Observed Property ID", "Date_Time", "Result Value", "Result Unit", "Activity Name", "Field: Comment", "Lab: Analysis Method", "Detection_Condition", "Lab: MDL", "Lab: MRL", "Lab: Comment", "Latitude", "Longitude", "EA_Reports To")) %>% #remove unwanted rows
@@ -1747,7 +1747,7 @@ df_times %>%
   filter(!(Hour == 0 & Minute == 0 & Second == 0)) %>% 
   count(Project, Hour) %>% 
   View()
-# TODO (DB): DEMP, Tidal Parr, WQA, and YBFMP have some odd collection times (before 5 AM and after
+# TODO (DB): Tidal Parr, WQA, and YBFMP have some odd collection times (before 5 AM and after
 # 5 PM). We may want to inspect these further before publishing the data.
 ```
 
