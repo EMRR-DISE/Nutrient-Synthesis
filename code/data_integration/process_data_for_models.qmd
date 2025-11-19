@@ -719,6 +719,37 @@ df_dayflow_tot_seas <- df_dayflow_tot_mo %>%
 ```
 
 
+# Water Year Hydrologic Classification Indices
+
+## Import Data
+
+```{r wyt index import data}
+df_wyt_2010_2024 <- readRDS(here("data/external/wy_type_2010_2024.rds"))
+```
+
+## Prepare Data
+
+```{r wyt index prepare data}
+# Prepare monthly values
+df_wyt_2010_2024_mo <- df_wyt_2010_2024 %>%
+  # Expand with months
+  expand_grid(Month = 1:12) %>%
+  # Adjust WY to calendar year
+  mutate(Year = if_else(Month %in% 10:12, Year - 1, Year))
+
+# Prepare seasonal values
+df_wyt_2010_2024_seas <- df_wyt_2010_2024_mo %>%
+  add_season() %>%
+  # Use adjusted calendar year for the seasonal assignments
+  # Adjusted calendar year: December-November, with December of the previous calendar year
+  # included with the following year
+  filter(!Month %in% 10:12) %>%
+  select(-Month) %>%
+  rename(YearAdj = Year) %>%
+  distinct()
+```
+
+
 # Combine All Data
 
 ```{r combine monthly values}
@@ -740,13 +771,14 @@ df_yr_mo_reg <-
     .before = Year
   )
 
-# Combine all Monthly-Regional averages (or monthly totals) into one data frame
+# Combine all Monthly-Regional averages, monthly totals, or annual values into one data frame
 monthly_values <-
   list(
     df_yr_mo_reg,
     ls_nutr_avg_wide$df_nutr_avg_mo,
     ls_dwq_avg_wide$df_dwq_avg_mo,
-    df_dayflow_tot_mo
+    df_dayflow_tot_mo,
+    df_wyt_2010_2024_mo
   ) %>%
   reduce(left_join)
 ```
@@ -759,13 +791,14 @@ df_yr_seas_reg <- df_yr_mo_reg %>%
   # Remove Summer 2024 because of low sampling
   filter(!(YearAdj == 2024 & Season == "Summer"))
 
-# Combine all Seasonal-Regional averages (or seasonal totals) into one data frame
+# Combine all Seasonal-Regional averages, seasonal totals, or annual values into one data frame
 seasonal_values <-
   list(
     df_yr_seas_reg,
     ls_nutr_avg_wide$df_nutr_avg_seas,
     ls_dwq_avg_wide$df_dwq_avg_seas,
-    df_dayflow_tot_seas
+    df_dayflow_tot_seas,
+    df_wyt_2010_2024_seas
   ) %>%
   reduce(left_join)
 ```

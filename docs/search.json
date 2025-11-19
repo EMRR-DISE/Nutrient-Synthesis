@@ -84,6 +84,20 @@
     "text": "Aggregate Data\n\n\nCode\n# Calculate monthly totals\ndf_dayflow_tot_mo &lt;- df_dayflow %&gt;%\n  summarize(\n    Sac_Inflow = sum(SAC),\n    SJR_Inflow = sum(SJR),\n    Total_Inflow = sum(TOT),\n    .by = c(Year, Month)\n  )\n\n\n\n\nCode\n# Further calculate seasonal totals using Adjusted calendar year: December-November, with December\n# of the previous calendar year included with the following year\ndf_dayflow_tot_seas &lt;- df_dayflow_tot_mo %&gt;%\n  mutate(YearAdj = if_else(Month == 12, Year + 1, Year)) %&gt;%\n  add_season() %&gt;%\n  summarize(across(ends_with(\"Inflow\"), sum), .by = c(YearAdj, Season))"
   },
   {
+    "objectID": "code/data_integration/process_data_for_models.html#import-data-3",
+    "href": "code/data_integration/process_data_for_models.html#import-data-3",
+    "title": "Process Input Data for Models",
+    "section": "Import Data",
+    "text": "Import Data\n\n\nCode\ndf_wyt_2010_2024 &lt;- readRDS(here(\"data/external/wy_type_2010_2024.rds\"))"
+  },
+  {
+    "objectID": "code/data_integration/process_data_for_models.html#prepare-data-3",
+    "href": "code/data_integration/process_data_for_models.html#prepare-data-3",
+    "title": "Process Input Data for Models",
+    "section": "Prepare Data",
+    "text": "Prepare Data\n\n\nCode\n# Prepare monthly values\ndf_wyt_2010_2024_mo &lt;- df_wyt_2010_2024 %&gt;%\n  # Expand with months\n  expand_grid(Month = 1:12) %&gt;%\n  # Adjust WY to calendar year\n  mutate(Year = if_else(Month %in% 10:12, Year - 1, Year))\n\n# Prepare seasonal values\ndf_wyt_2010_2024_seas &lt;- df_wyt_2010_2024_mo %&gt;%\n  add_season() %&gt;%\n  # Use adjusted calendar year for the seasonal assignments\n  # Adjusted calendar year: December-November, with December of the previous calendar year\n  # included with the following year\n  filter(!Month %in% 10:12) %&gt;%\n  select(-Month) %&gt;%\n  rename(YearAdj = Year) %&gt;%\n  distinct()"
+  },
+  {
     "objectID": "index.html",
     "href": "index.html",
     "title": "DWR Nutrient Synthesis",
