@@ -9,6 +9,7 @@ library(car)
 library(lme4)
 library(lmerTest)
 library(lubridate)
+theme_set(theme_bw())
 options(contrasts = c('contr.sum', 'contr.poly'))
 source('code/functions/ns_funcs.R')
 ```
@@ -182,8 +183,7 @@ ggplot(df_plt, aes(x = Value)) +
     color = 'black',
     fill = 'lightgray'
   ) +
-  facet_wrap(~Analyte, scales = 'free') +
-  theme_bw()
+  facet_wrap(~Analyte, scales = 'free')
 ```
 
 They're pretty much all appear right-skewed to various degrees except for temperature, which almost appears bivariate, and pH which is slightly left skewed. A few, like chlorophyll and pH, indicate outliers exist.
@@ -220,26 +220,26 @@ ggplot(df_plt, aes(x = 1, y = Value)) +
     na.rm = TRUE
   ) +
   facet_wrap(~Analyte, scales = 'free_y') +
-  theme_bw() +
   theme(legend.position = 'none')
 
 ```
 
-There's a few, though none I would remove outright. However, further on I decided I wanted to remove the two extreme DissAmmonia, three extreme Chla, and the extreme pH values, which I'll do here:
+There's a few, though none I would remove outright. However, further on I decided I wanted to remove a few extreme DissAmmonia, pH, Chlorophyll, and DissOrthophos values (7 total), which I'll do here:
 
 ```{r}
 df_monthly_rm <- df_monthly_rm %>%
-  filter(!(DissAmmonia > 0.4 | pH < 6.5 | Chlorophyll > 35) |
+  filter(!(DissAmmonia > 0.4 | pH < 6.5 | Chlorophyll > 35 | DissOrthophos < 0.01) |
            is.na(DissAmmonia) |
            is.na(pH) |
-           is.na(Chlorophyll))
+           is.na(Chlorophyll) |
+           is.na(DissOrthophos))
 ```
 
 ## Impute (Optional)
 
 Next we'll impute missing data using a linear approximation. **If methods don't require a continuous, equally-spaced time series, this step is optional.** However, I like doing it (when feasible) to offset unbalanced design issues.
 
-If your data has non-detects, make sure to impute those values between (slightly larger than) 0 and the reporting limit.
+If your data has non-detects, make sure to uniformally impute those values between (slightly larger than) 0 and the reporting limit.
 
 ```{r}
 df_monthly_imputed <- df_monthly_rm %>%
@@ -301,13 +301,16 @@ for (r in regions) {
         name = ''
       ) +
       facet_wrap(~ variable, scales = 'free', ncol = 2) +
-      theme_minimal() +
       labs(
         title = paste('Region:', r)
       )
 
   print(p)
 }
+
+# clean dataframe
+df_monthly_imputed <- df_monthly_imputed %>%
+  select(-starts_with('imp_'))
 
 ```
 
@@ -317,9 +320,7 @@ Next we transform the data. Here I do:
 
 -   log transforms: helps stabilize variance, fits certain data patterns
 
--   AR1 lag terms: so previous time's value can be used in regressions
-
-For coding simplicity I just did these to everything, even if I don't end up using them.
+-   AR1 lag terms: so previous time's value can be used in regressions. I just do this for response variables (Chlorophyll, log_Chlorophyll, and later log_DissAmmonia).
 
 ```{r}
 # log data
@@ -338,7 +339,8 @@ df_monthly_log <- df_monthly_log %>%
   group_by(Region) %>%
   mutate(
     lag_logChlorophyll = lag(log_Chlorophyll),
-    lag_Chlorophyll = lag(Chlorophyll)
+    lag_Chlorophyll = lag(Chlorophyll),
+    lag_logDissAmmonia = lag(log_DissAmmonia)
   ) %>%
   ungroup() %>%
   relocate(c(Chlorophyll, log_Chlorophyll, Date),
@@ -380,9 +382,9 @@ corrplot::corrplot(
 
 DissolvedOxygen and Temperature are strongly negatively correlated; DO is also correlated with DissNitrateNitrite. Temp is also slightly correlated with DissAmmonia and, more strongly, DissNitrateNitrite. DON/DissNitrateNitrite and Turbidity/Total Inflow are moderately correlated, which makes sense.
 
-# Bivariate Relationships (Chla)
+## Bivariate (Continuous)
 
-Next we graph our explanatory variables against our response variable. I like to look at the raw points (to get a true sense of the data) and interpolated splines to understand the shape of relationship.
+Next we graph our explanatory variables against our response variable. I like to look at the raw points (to get a true sense of the data) and interpolated splines to understand the shape of relationship, including by region since that's a possible variable.
 
 I ended up using log_Chlorophyll as my response, but kept the Chlorophyll graphs for reference.
 
@@ -402,106 +404,116 @@ df_plt_log <- df_monthly_log %>%
   )
 ```
 
-## Scatterplots
+### Scatterplots
 
 ```{r}
 ggplot(df_plt) +
   geom_point(aes(Value, Chlorophyll, color = Region), shape = 21, alpha = 0.5) +
-  facet_wrap(~Analyte, scales = 'free_x') +
-  theme_bw()
+  facet_wrap(~Analyte, scales = 'free_x')
 ```
 
 ```{r}
 ggplot(df_plt_log) +
   geom_point(aes(Value, Chlorophyll, color = Region), shape = 21, alpha = 0.5) +
-  facet_wrap(~Analyte, scales = 'free_x') +
-  theme_bw()
+  facet_wrap(~Analyte, scales = 'free_x')
 ```
 
 ```{r}
 ggplot(df_plt) +
   geom_point(aes(Value, log_Chlorophyll, color = Region), shape = 21, alpha = 0.5) +
-  facet_wrap(~Analyte, scales = 'free_x') +
-  theme_bw()
+  facet_wrap(~Analyte, scales = 'free_x')
 ```
 
 ```{r}
 ggplot(df_plt_log) +
   geom_point(aes(Value, log_Chlorophyll, color = Region), shape = 21, alpha = 0.5) +
-  facet_wrap(~Analyte, scales = 'free_x') +
-  theme_bw()
+  facet_wrap(~Analyte, scales = 'free_x')
 ```
 
-## Splines (Global)
+### Splines (Global)
 
 ```{r}
 ggplot(df_plt) +
   geom_smooth(aes(Value, Chlorophyll)) +
-  facet_wrap(~Analyte, scales = 'free_x') +
-  theme_bw()
+  facet_wrap(~Analyte, scales = 'free_x')
 ```
 
 ```{r}
 ggplot(df_plt_log) +
   geom_smooth(aes(Value, Chlorophyll)) +
-  facet_wrap(~Analyte, scales = 'free_x') +
-  theme_bw()
+  facet_wrap(~Analyte, scales = 'free_x')
 ```
 
 ```{r}
 ggplot(df_plt) +
   geom_smooth(aes(Value, log_Chlorophyll)) +
-  facet_wrap(~Analyte, scales = 'free_x') +
-  theme_bw()
+  facet_wrap(~Analyte, scales = 'free_x')
 ```
 
 ```{r}
 ggplot(df_plt_log) +
   geom_smooth(aes(Value, log_Chlorophyll)) +
-  facet_wrap(~Analyte, scales = 'free_x') +
-  theme_bw()
+  facet_wrap(~Analyte, scales = 'free_x')
 ```
 
-## Splines (Regional)
+### Splines (Regional)
 
 ```{r}
 ggplot(df_plt) +
   geom_smooth(aes(Value, Chlorophyll, color = Region)) +
-  facet_wrap(~Analyte, scales = 'free_x') +
-  theme_bw()
+  facet_wrap(~Analyte, scales = 'free_x')
 ```
 
 ```{r}
 ggplot(df_plt_log) +
   geom_smooth(aes(Value, Chlorophyll, color = Region)) +
-  facet_wrap(~Analyte, scales = 'free_x') +
-  theme_bw()
+  facet_wrap(~Analyte, scales = 'free_x')
 ```
 
 ```{r}
 ggplot(df_plt) +
   geom_smooth(aes(Value, log_Chlorophyll, color = Region)) +
-  facet_wrap(~Analyte, scales = 'free_x') +
-  theme_bw()
+  facet_wrap(~Analyte, scales = 'free_x')
 ```
 
 ```{r}
 ggplot(df_plt_log) +
   geom_smooth(aes(Value, log_Chlorophyll, color = Region)) +
-  facet_wrap(~Analyte, scales = 'free_x') +
-  theme_bw()
+  facet_wrap(~Analyte, scales = 'free_x')
 ```
+
+From these, I decided to keep log_DissAmmonia, Total_Inflow, and Temperature in my model. I also added log_DissOrthophosphate since I think it's usually considered an important variable. Note that Temperature appears to have a cubic relationship with log_Chlorophyll.
+
+## Bivariate (Categorical)
+
+It's also worth seeing how chlorophyll is influenced by categorical variables, in this case region:
+
+```{r}
+ggplot(df_plt) +
+  geom_boxplot(aes(Region, Chlorophyll, fill = Region))
+```
+
+```{r}
+ggplot(df_plt) +
+  geom_violin(aes(Region, Chlorophyll, fill = Region))
+```
+
+South Central has the most variance, followed by Suisun Marsh. The other regions seem similarly distributed.
 
 # Test Models
 
-I'll fit some simple models to show how piecewiseSEM works. I'll assume a main model and that nutrients are also directly affected by flow and salinity.
+Since SEMs are a series of related models (with shared covariance), it's worth it to check each sub-model individually. For traditional SEMs, only `lm` (fixed effects) models can be used, though piecewiseSEM can handle other model types. Here, I used linear mixed effects models.
 
-We'll subset the data from 02-01-2017 to 12-31-2022 to escape issues with unbalanced regional data for simplicity. Also removing outliers (determined from previous model diagnostics).
+For simplicity, I subset the data from 02-01-2017 to 12-31-2022 to escape issues with unbalanced regional data. I also added three new variables: centered Temperature and the squared/cubed versions of it. This is so I correctly model Temperature's likely non-linear dependence on Chlorophyll.
+
+I also remove some extreme outliers I found in the model.
 
 ```{r}
 df_monthly_subset <- df_monthly_log %>%
-  filter(Year < 2023 & Date > '2017-02-01') %>%
-  slice(-c(5,337))
+  filter(Year < 2023 & Date > '2017-02-01')
+
+df_monthly_subset <- df_monthly_subset %>%
+  slice(-c(5, 337))
 
 df_monthly_subset <- df_monthly_subset %>%
   mutate(       
@@ -515,11 +527,11 @@ df_monthly_subset <- df_monthly_subset %>%
           lag_logChlorophyll, lag_logDissAmmonia, log_pH, log_Temperature)
 ```
 
-## LMM - main
+## LMM - Chla
 
 ### Test vs Train split
 
-Usually not really needed, mostly just doing as a quick check that the model makes sense; will re-run with full dataset.
+*Usually not needed for causal inference, mostly just doing as a quick check that the model makes sense. Will re-run with full dataset.*
 
 Temperature looked cubic to me, so I centered it and added polynomial terms. It's coefficients must be interpreted together to give you the slope of T, which is not a constant (B_1 + 2B_2(T_c) + 3B_3(T_c\^2)).
 
@@ -585,7 +597,9 @@ print(RMSE); print(MAE); print(bias)
 plot(fit_main)
 ```
 
-Looks pretty good, it does overestimate, but it's a consistent offset and not horribly off.
+Looks pretty good! It does overestimate, but it's a consistent offset and not horribly off.
+
+Next is model diagnostics:
 
 ```{r}
 plot(acf(residuals(fit_main)))
@@ -604,7 +618,7 @@ qqnorm(res)
 qqline(res, col = 'red', lwd = 2)
 ```
 
-Model diagnostics look pretty good; slight autocorrelation at the 15th lag that's indicates minor model mis-specification, and there's some right-tail skew, but neither are particularly noteworthy.
+Model diagnostics look pretty good; slight autocorrelation at the 15th lag that's indicates minor model misspecification, and there's some right-tail skew, but neither are particularly noteworthy.
 
 ### Full model
 
@@ -648,15 +662,15 @@ mf <- model.frame(fit_main)
 row_map <- as.numeric(rownames(mf))
 res <- residuals(fit_main)
 
-res_df <- tibble(
+df_resrow <- tibble(
   row = row_map,
   resid = res,
   fitted = fitted(fit_main)
 )
 
-df_with_res <- df_monthly_subset %>%
+df_res <- df_monthly_subset %>%
   mutate(row = row_number()) %>%
-  left_join(res_df, by = 'row')
+  left_join(df_resrow, by = 'row')
 ```
 
 ```{r}
@@ -666,11 +680,11 @@ qqnorm(res)
 qqline(res, col = 'red', lwd = 2)
 ```
 
-Looks similar to the test model.
+Looks similar to the test model, so we're good.
 
 ## LMM - DissAmmonia
 
-Next, we'll model DissolvedAmmonia. I didn't bother with intense model diagnostics here, but they should definitely be done for real models.
+Since SEMs ideally have at least two "sub models", I'll throw together a quick model for DissolvedAmmonia. I didn't bother with intense model diagnostics here, but they should definitely be done for real models.
 
 ```{r}
 df_plt_log <- df_monthly_log %>%
