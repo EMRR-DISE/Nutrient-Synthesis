@@ -1,0 +1,689 @@
+```{r}
+# read in data
+library(tidyverse)
+library(emmeans)
+library(car)
+library(lme4)
+library(lmerTest)
+library(lubridate)
+options(contrasts = c('contr.sum', 'contr.poly'))
+source('code/functions/ns_funcs.R')
+```
+
+# Read in data
+
+```{r}
+fp_monthly <- abs_ns_path('Data/monthly_values.csv')
+df_monthly <- read_csv(fp_monthly) %>%
+  mutate(Region = factor(Region),
+         Date = make_date(Year, Month, 1)) %>%
+  arrange(Region, Date)
+
+fp_seasonal <- abs_ns_path('Data/seasonal_values.csv')
+df_seasonal <- read_csv(fp_seasonal) %>%
+  mutate(Region = factor(Region))
+```
+
+# Exploratory analysis (monthly)
+
+## Balance check
+
+How many samples do we have per region?
+
+```{r}
+df_monthly %>% 
+  count(Region)
+```
+
+Pretty even, but how many are non-NAs for relevant variables?
+
+```{r}
+df_monthly %>%
+  group_by(Region) %>%
+  summarize(
+    across(
+      DissAmmonia:Total_Inflow,
+      ~ sum(!is.na(.)),
+      .names = '{col}'
+    ),
+    .groups = 'drop'
+  )
+```
+
+There are missing values for certain analytes. The categories are:
+
+**balanced**: Temperature, Salinity, Turbidity, DissolvedOxygen, Inflows
+
+**relatively balanced (>= 75%)**: Chlorophyll, pH, MVI
+
+**missing data (Suisun Marsh)**: DissAmmonia, DissNitrateNitrite, DissOrthophos, DON, TKN, TotPhos
+
+**missing a lot of data**: DissNitrate
+
+We can break this down by month to see if the missing data is interpolable or not:
+
+```{r}
+df_missing <- df_monthly %>%
+  pivot_longer(
+    cols = DissAmmonia:Total_Inflow,
+    names_to = 'Variable',
+    values_to = 'Value'
+  ) %>%
+  mutate(
+    Missing = factor(
+      if_else(is.na(Value), 1, 0),
+      levels = c(0,1),
+      labels = c('Present','Missing')
+    ),
+    Month = floor_date(Date, 'month')
+  )
+
+plots <- df_missing %>%
+  group_by(Variable) %>%
+  group_split() %>%
+  lapply(function(df) {
+    ggplot(df, aes(x = Month, y = Region, fill = Missing)) +
+      geom_tile(color = 'grey20', linewidth = 0.3, width = 35) +
+      scale_fill_manual(
+        values = c('Present' = 'lightblue', 'Missing' = 'white')
+      ) +
+      scale_x_date(
+        date_breaks = '6 months',
+        date_labels = '%m-%Y'
+      ) +
+      theme_minimal() +
+      labs(
+        title = paste0('Missing Data: ', unique(df$Variable)),
+        fill = 'P/A'
+      ) +
+      theme(
+        axis.text.x = element_text(angle = 90, hjust = 1, size = 6),
+        panel.grid = element_blank()
+      )
+  })
+
+plots
+```
+
+Findings:
+
+No data until 02-2017 for Suisun Marsh: DON, DissAmmonia, DissNitrateNitrite, DissOrthophos, TKN, TotPhos
+- rest of missing data is interpolable
+
+Lots of missing data: DissNitrate
+
+Large gaps until 06-2015: MVI
+- all 5 months between Jan-May
+
+Missing after 01-2023 for Suisun Marsh/Suisun Bay: pH 
+
+Small interpolable gaps: Chlorophyll
+
+No gaps: Temperature, Salinity, Turbidity, DissolvedOxygen, Inflows
+
+
+## Discussion
+
+A few analytes can be used for the entire 01-2010 thorough 06-2024 time range:
+
+- Fully ready: Temperature, Salinity, Turbidity, DissolvedOxygen, Inflows
+
+- Needs minor interpolation: Chlorophyll
+ 
+A few could be used for the entire range (with minor interpolation) for all regions except Suisun Marsh. The options are:
+
+- cut the analysis range to begin on 02-2017
+ 
+- remove Suisun Marsh from primary analyses, keep full range
+  - could run separately on narrower time frame
+  
+- analyze with full dataset, interpret with unbalanced design in mind
+    
+pH is missing data after 01-2023 for two regions; this feels like an error to me, so we might want to double check the original data. If not, the options are similar to above:
+
+- cut the analysis range to end at 01-2023
+
+- remove Suisun Marsh/Suisun Bay from primary analyses
+
+- analyze with full dataset, interpret with unbalanced design in mind
+
+MVI has multiple data gaps and some large, non-interpolate gaps. Options are similar to above. We also have chlorophyll data as a response variable to ground truth our results with if analyses look off.
+
+DissNitrate is missing large amounts of data and should be excluded.
+
+# Data Processing
+
+First we'll impute missing data using a linear approximation. We'll remove unused analytes for convenience.
+
+(If methods don't require a continuous, equally-spaced time series, this step is optional.)
+
+```{r}
+df_monthly_rm <- df_monthly %>%
+  select(-c(DissNitrate, Microcystis, SJR_Inflow, Sac_Inflow, TKN, TotPhos))
+
+df_monthly_imputed <- df_monthly_rm %>%
+  arrange(Region, Date) %>%
+  group_by(Region) %>%
+  mutate(
+    across(
+      DissAmmonia:Total_Inflow,
+      ~ is.na(.x),
+      .names = 'imp_{.col}'
+    ),
+    across(
+      DissAmmonia:Total_Inflow,
+      ~ zoo::na.approx(.x, na.rm = FALSE),
+      .names = '{.col}'
+    )
+  ) %>%
+  ungroup()
+
+values_long <- df_monthly_imputed %>%
+  pivot_longer(
+    cols = DissAmmonia:Total_Inflow,
+    names_to = 'variable',
+    values_to = 'value'
+  )
+flags_long <- df_monthly_imputed %>%
+  pivot_longer(
+    cols = starts_with('imp_'),
+    names_to = 'flag_var',
+    values_to = 'imp'
+  ) %>%
+  mutate(variable = sub('imp_', '', flag_var)) %>%
+  select(Date, Region, variable, imp)
+df_plot <- values_long %>%
+  left_join(flags_long, by = c('Date', 'Region', 'variable'))
+vars_with_imputation <- df_plot %>%
+  group_by(variable) %>%
+  summarise(any_imp = any(imp, na.rm = TRUE)) %>%
+  filter(any_imp) %>%
+  pull(variable)
+
+regions <- unique(df_plot$Region)
+
+for (r in regions) {
+  p <- df_plot %>%
+    filter(
+      Region == r,
+      variable %in% vars_with_imputation
+    ) %>%
+    ggplot(aes(Date, value)) +
+      geom_line(color = 'gray40', linewidth = 0.5) +
+      geom_point(aes(color = imp), size = 1.5, shape = 21, stroke = 0.8) +
+      scale_color_manual(
+        values = c('FALSE' = 'black', 'TRUE' = 'red'),
+        labels = c('Observed', 'Imputed'),
+        name = ''
+      ) +
+      facet_wrap(~ variable, scales = 'free_y', ncol = 2) +
+      theme_minimal() +
+      labs(
+        title = paste('Region:', r)
+      )
+
+  print(p)
+}
+
+```
+
+Next we transform the data. We add log transforms and add AR1 lags of the Chlorophyll/log_Chlorophyll variables. We also z-score the data (center-only for the response variables), which is optional; it speeds up computation depending on the method and, depending on the goal, can help with interpretations.
+
+```{r}
+# log data
+df_monthly_log <- df_monthly_imputed %>%
+  mutate(
+    across(
+      DissAmmonia:Total_Inflow,
+      ~ log(.x),
+      .names = 'log_{.col}'
+    )
+  )
+
+# add lags
+df_monthly_log <- df_monthly_log %>%
+  arrange(Region, Date) %>%
+  group_by(Region) %>%
+  mutate(
+    lag_logChlorophyll = lag(log_Chlorophyll),
+    lag_Chlorophyll = lag(Chlorophyll)
+  ) %>%
+  ungroup() %>%
+  relocate(c(Chlorophyll, log_Chlorophyll, Date),
+         .after = last_col())
+
+# z-score data; response Chl only center
+# df_monthly_z <- df_monthly_log %>%
+#   mutate(
+#     across(
+#       c(DissAmmonia:log_Total_Inflow, lag_logChlorophyll, lag_Chlorophyll),
+#       ~ as.numeric(scale(.x, center = TRUE, scale = TRUE))
+#     ),
+#     Chlorophyll = as.numeric(scale(Chlorophyll, center = TRUE, scale = TRUE)),
+#     log_Chlorophyll = as.numeric(scale(log_Chlorophyll, center = TRUE, scale = TRUE))
+#   )
+```
+
+# Correlations
+
+```{r}
+corrplot::corrplot(
+  cor(df_monthly_log %>% select(c(Chlorophyll,DissAmmonia:Total_Inflow)), use = 'pairwise.complete.obs'),
+  method = 'color',
+  type = 'lower',
+  diag = TRUE
+)
+```
+
+DissolvedOxygen and Temperature are strongly negatively correlated, which is expected. Temp is also slighly correlated with DissAmmonia and DissNitrateNitrite.
+
+# Bivariate Relationships
+
+```{r}
+df_monthly_log <- df_monthly_log %>%
+  filter(DissAmmonia < 0.4,
+         pH > 6.5)
+```
+
+
+```{r}
+df_plt <- df_monthly_log %>%
+  pivot_longer(
+    cols = c(DissAmmonia:Total_Inflow, lag_Chlorophyll),
+    names_to = 'Analyte',
+    values_to = 'Value'
+  )
+
+df_plt_log <- df_monthly_log %>%
+  pivot_longer(
+    cols = c(log_DissAmmonia:log_Total_Inflow, lag_logChlorophyll),
+    names_to = 'Analyte',
+    values_to = 'Value'
+  )
+```
+
+```{r}
+ggplot(df_plt) +
+  geom_point(aes(Value, Chlorophyll, color = Region), shape = 21, alpha = 0.5) +
+  facet_wrap(~Analyte, scales = 'free_x') +
+  theme_bw()
+```
+
+```{r}
+ggplot(df_plt_log) +
+  geom_point(aes(Value, log_Chlorophyll, color = Region), shape = 21, alpha = 0.5) +
+  facet_wrap(~Analyte, scales = 'free_x') +
+  theme_bw()
+```
+
+```{r}
+ggplot(df_plt) +
+  geom_point(aes(Value, log_Chlorophyll, color = Region), shape = 21, alpha = 0.5) +
+  facet_wrap(~Analyte, scales = 'free_x') +
+  theme_bw()
+```
+
+
+```{r}
+ggplot(df_plt) +
+  geom_smooth(aes(Value, Chlorophyll)) +
+  facet_wrap(~Analyte, scales = 'free_x') +
+  theme_bw()
+```
+
+```{r}
+ggplot(df_plt) +
+  geom_smooth(aes(Value, Chlorophyll, color = Region)) +
+  facet_wrap(~Analyte, scales = 'free_x') +
+  theme_bw()
+```
+
+```{r}
+ggplot(df_plt_log) +
+  geom_smooth(aes(Value, log_Chlorophyll)) +
+  facet_wrap(~Analyte, scales = 'free_x') +
+  theme_bw()
+```
+
+```{r}
+ggplot(df_plt_log) +
+  geom_smooth(aes(Value, log_Chlorophyll, color = Region)) +
+  facet_wrap(~Analyte, scales = 'free_x') +
+  theme_bw()
+```
+
+```{r}
+ggplot(df_plt) +
+  geom_smooth(aes(Value, log_Chlorophyll)) +
+  facet_wrap(~Analyte, scales = 'free_x') +
+  theme_bw()
+```
+
+```{r}
+ggplot(df_plt) +
+  geom_smooth(aes(Value, log_Chlorophyll, color = Region)) +
+  facet_wrap(~Analyte, scales = 'free_x') +
+  theme_bw()
+```
+
+# Test Models
+
+I'll fit some simple models to show how piecewiseSEM works. I'll assume a main model and that nutrients are also directly affected by flow and salinity.
+
+We'll subset the data from 02-01-2017 to 12-31-2022 to escape issues with unbalanced regional data for simplicity. Also removing outliers (determined from previous model diagnostics).
+
+```{r}
+df_monthly_subset <- df_monthly_log %>%
+  filter(Year < 2023 & Date > '2017-02-01') %>%
+  slice(-c(5,337))
+
+df_monthly_subset <- df_monthly_subset %>%
+  mutate(       
+    Temperature_c = scale(Temperature, center = TRUE, scale = FALSE)[,1],
+    Temperature2 = Temperature_c^2,
+    Temperature3 = Temperature_c^3
+    )
+
+df_monthly_subset <- df_monthly_subset %>%
+  drop_na(log_Chlorophyll, log_Salinity, log_DissAmmonia, log_DissOrthophos, log_Turbidity,
+          lag_logChlorophyll, lag_logDissAmmonia, log_pH, log_Temperature)
+```
+
+
+## LMM - main 
+
+### Test vs Train split
+
+Usually not really needed, mostly just doing as a quick check that the model makes sense; will re-run with full dataset.
+
+Temperature looked cubic to me, so I centered it and added polynomial terms. It's coefficients must be interpreted together to give you the slope of T, which is not a constant (B_1 + 2B_2(T_c) + 3B_3(T_c^2)).
+
+```{r}
+# --- split testing/training ---
+sorted_dates <- sort(unique(df_monthly_subset$Date))
+
+cut_idx <- floor(0.8 * length(sorted_dates))
+
+train_dates <- sorted_dates[1:cut_idx]
+test_dates  <- sorted_dates[(cut_idx + 1):length(sorted_dates)]
+
+df_train <- df_monthly_subset %>% filter(Date %in% train_dates)
+df_test  <- df_monthly_subset %>% filter(Date %in% test_dates)
+
+# -- training model --
+fit_main <- lmer(
+  log_Chlorophyll ~ 
+    log_Salinity + 
+    log_DissAmmonia +
+    log_DissOrthophos +
+    log_Turbidity +
+    lag_logChlorophyll +
+    pH +
+    Temperature_c +
+    Temperature2 +
+    Temperature3 +
+    (1|Region),
+  data = df_train,
+  na.action = na.omit
+)
+
+summary(fit_main)
+
+# -- predicted model --
+df_test <- df_test %>%
+  drop_na(log_Chlorophyll, log_Temperature, log_DissAmmonia, log_Total_Inflow)
+
+df_test <- df_test %>%
+  mutate(pred_log_Chl = predict(fit_main, newdata = df_test))
+
+# -- plot --
+rng <- range(c(df_test$pred_log_Chl, df_test$log_Chlorophyll), na.rm = TRUE)
+
+ggplot(df_test, aes(x = pred_log_Chl, y = log_Chlorophyll)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = 'lm', se = FALSE, linewidth = 0.7) +
+  geom_abline(intercept = 0, slope = 1, linetype = 'dashed') +
+  coord_equal(xlim = rng, ylim = rng) +
+  labs(
+    x = 'Predicted',
+    y = 'Observed',
+    title = 'Predicted vs Observed'
+  ) +
+  theme_minimal()
+
+RMSE <- sqrt(mean((df_test$log_Chlorophyll - df_test$pred_log_Chl)^2))
+MAE  <- mean(abs(df_test$log_Chlorophyll - df_test$pred_log_Chl))
+bias <- mean(df_test$pred_log_Chl - df_test$log_Chlorophyll)
+
+print(RMSE); print(MAE); print(bias)
+
+plot(fit_main)
+```
+
+Looks pretty good, it does overestimate, but it's a consistent offset and not horribly off.
+
+```{r}
+plot(acf(residuals(fit_main)))
+plot(pacf(residuals(fit_main)))
+```
+
+```{r}
+infl <- performance::check_outliers(fit_main)
+infl
+```
+
+```{r}
+res <- residuals(fit_main)
+
+qqnorm(res)
+qqline(res, col = 'red', lwd = 2)
+```
+Model diagnostics look pretty good; slight autocorrelation at the 15th lag that's indicates minor model mis-specification, and there's some right-tail skew, but neither are particularly noteworthy.
+
+### Full model
+
+Now we run the model:
+
+```{r}
+fit_main <- lmer(
+  log_Chlorophyll ~ 
+    log_Salinity + 
+    log_DissAmmonia +
+    log_DissOrthophos +
+    log_Turbidity +
+    lag_logChlorophyll +
+    log_pH +
+    Temperature_c +
+    Temperature2 +
+    Temperature3 +
+    (1|Region),
+  data = df_monthly_subset,
+  na.action = na.omit
+)
+
+summary(fit_main)
+plot(fit_main)
+```
+
+The coefficients are similar, which is expected.
+
+```{r}
+plot(acf(residuals(fit_main)))
+plot(pacf(residuals(fit_main)))
+```
+
+```{r}
+infl <- performance::check_outliers(fit_main)
+infl
+```
+
+```{r}
+mf <- model.frame(fit_main) 
+row_map <- as.numeric(rownames(mf))
+res <- residuals(fit_main)
+
+res_df <- tibble(
+  row = row_map,
+  resid = res,
+  fitted = fitted(fit_main)
+)
+
+df_with_res <- df_monthly_subset %>%
+  mutate(row = row_number()) %>%
+  left_join(res_df, by = 'row')
+```
+
+```{r}
+res <- residuals(fit_main)
+
+qqnorm(res)
+qqline(res, col = 'red', lwd = 2)
+```
+Looks similar to the test model.
+
+## LMM - DissAmmonia
+
+Next, we'll model DissolvedAmmonia. I didn't bother with intense model diagnostics here, but they should definitely be done for real models.
+
+```{r}
+df_plt_log <- df_monthly_log %>%
+  mutate(lag_logDissAmmonia = lag(log(DissAmmonia))) %>%
+  pivot_longer(
+    cols = c(log_DissNitrateNitrite:log_Total_Inflow, lag_logChlorophyll, lag_logDissAmmonia),
+    names_to = 'Analyte',
+    values_to = 'Value'
+  )
+```
+
+```{r}
+ggplot(df_plt) +
+  geom_smooth(aes(Value, log_DissAmmonia)) +
+  facet_wrap(~Analyte, scales = 'free_x') +
+  theme_bw()
+```
+```{r}
+ggplot(df_plt_log) +
+  geom_smooth(aes(Value, log_DissAmmonia)) +
+  facet_wrap(~Analyte, scales = 'free_x') +
+  theme_bw()
+```
+
+```{r}
+fit_amm <- lmer(
+  log_DissAmmonia ~ 
+    lag_logDissAmmonia +
+    Temp1 +
+    log_Turbidity +
+    (1|Region),
+  data = df_monthly_subset,
+  na.action = na.omit
+)
+
+summary(fit_amm)
+plot(fit_amm)
+```
+
+# SEMs
+
+Linear piecewise model (direct comparison to tradtional SEM):
+
+```{r}
+library(piecewiseSEM)
+
+fit_main <- lm(
+  log_Chlorophyll ~ log_Salinity + 
+    log_DissAmmonia +
+    log_DissOrthophos +
+    log_Turbidity +
+    lag_logChlorophyll +
+    Temperature_c +
+    Temperature2 +
+    Temperature3,
+  data = df_monthly_subset)
+
+fit_amm <- lm(
+  log_DissAmmonia ~ lag_logDissAmmonia +
+    Temperature_c +
+    log_Salinity +
+    log_Turbidity +
+    log_DissOrthophos,
+    data = df_monthly_subset)
+
+psem_out <- psem(fit_main, fit_amm, data = df_monthly_subset)
+summary(psem_out, standardize = 'scale')
+```
+
+LMM piecewise model:
+
+```{r}
+fit_main <- lmer(
+  log_Chlorophyll ~ log_Salinity +
+    log_DissAmmonia +
+    log_DissOrthophos +
+    log_Turbidity +
+    lag_logChlorophyll +
+    Temperature_c +
+    Temperature2 +
+    Temperature3 +
+    (1|Region),
+  data = df_monthly_subset)
+
+fit_amm <- lmer(
+  log_DissAmmonia ~ lag_logDissAmmonia +
+    Temperature_c +
+    log_Turbidity +
+    (1|Region),
+  data = df_monthly_subset)
+
+psem_out <- psem(fit_main, fit_amm, data = df_monthly_subset)
+summary(psem_out, standardize = 'scale')
+```
+
+Linear model (traditional SEM):
+
+```{r}
+library(lavaan)
+
+model <- '
+  # regression paths
+    log_Chlorophyll ~ log_Salinity + 
+    log_DissAmmonia +
+    log_DissOrthophos +
+    log_Turbidity +
+    lag_logChlorophyll +
+    Temperature_c +
+    Temperature2 +
+    Temperature3
+    
+    log_DissAmmonia ~ lag_logDissAmmonia +
+    Temperature_c +
+    log_DissOrthophos +
+    log_Turbidity
+
+    log_DissAmmonia ~~ log_Chlorophyll
+'
+
+fit <- sem(model, data = df_monthly_subset)
+
+summary(fit, fit.measures = TRUE, standardized = TRUE)
+```
+
+
+```{r}
+library(semPlot)
+
+semPaths(
+  fit,
+  what = 'std',      
+  whatLabels = 'std',
+  layout = 'tree2', 
+  nCharNodes = 5,
+  edge.label.cex = 1.1,
+  sizeMan = 5,         
+  edge.width = 1,
+  esize = 1,
+  residuals = FALSE,   
+  mar = c(7, 7, 7, 7)
+)
+```
+
