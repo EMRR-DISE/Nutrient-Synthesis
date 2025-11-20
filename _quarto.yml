@@ -1,0 +1,22 @@
+project:
+  type: website
+  output-dir: docs
+  render: 
+    - index.qmd
+    - code/data_integration/process_data_for_models.qmd
+
+website:
+  title: "DWR Nutrient Synthesis"
+  navbar:
+    pinned: true
+    right:
+      - icon: github
+        href: https://github.com/EMRR-DISE/Nutrient-Synthesis
+        aria-label: GitHub
+
+format:
+  html:
+    theme: cosmo
+    css: styles.css
+    toc: true
+

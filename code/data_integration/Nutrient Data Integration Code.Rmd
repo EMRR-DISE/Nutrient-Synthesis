@@ -5,19 +5,21 @@ date: "2025-03-13"
 output: html_document
 ---
 
-##Load Packages
--Load necessary packages that we will use for this analysis
+## Load Packages
+
+Load necessary packages that we will use for this analysis
+
 ```{r}
 library(tidyverse)
-library("ggpubr")
-library(lubridate)
-library(wql)
-library(RColorBrewer)
+library(glue)
 library(EDIutils)
+library(here)
 ```
 
-##Run Functions
--Run function to grab EDI data 
+## Run Functions
+
+Run function to grab EDI data
+
 ```{r}
 get_edi_file <- function(pkg_id, fname) {
   # define scope
@@ -51,31 +53,28 @@ get_edi_file <- function(pkg_id, fname) {
 
   return(df)
 }
-
 ```
 
--Run function to read in SharePoint files
+Run function to read in SharePoint files
+
 ```{r}
-
 abs_nutrient_path <- function(fp_rel = NULL) {
-
-  base_path <- file.path(Sys.getenv('USERPROFILE'), 'California Department of Water Resources', 'Nutrient synthesis - Documents/Data Integration Team/2025 Data Integration Code Files')
+  base_path <- file.path(
+    Sys.getenv('USERPROFILE'), 
+    'California Department of Water Resources', 
+    'Nutrient synthesis - Documents/Data Integration Team/2025 Data Integration Code Files'
+  )
 
   if (is.null(fp_rel)) {
-
     return(base_path)
-
   } else {
-
     return(file.path(base_path, fp_rel))
-
   }
-
 }
- 
 ```
 
--Run function to check for coerced NAs
+Run function to check for coerced NAs
+
 ```{r}
 check_non_numeric <- function(df, col_name) {
   if (col_name %in% names(df)) {
@@ -99,22 +98,21 @@ check_non_numeric <- function(df, col_name) {
 
 ### 1 - Tidal Parr
 
--Import Tidal Parr data
+Import Tidal Parr data
+
 ```{r}
 fp_tp <- abs_nutrient_path("Tidal Parr_Data_Final.csv")
 
 df_tp <- read_csv(fp_tp) #read in data file
 
-#rm(fp_tp) #remove file paths
+rm(fp_tp) #remove file paths
 ```
 
--Check/Format Data
-```{r}
-unique(df_tp$Matrix) #only shows Water, Natural
-#but also has NA's... why? 
+Check/Format Data
 
-foo = filter(df_tp, is.na(Matrix))
-# View(foo)
+```{r}
+unique(df_tp$Matrix) #only shows Water, Natural, but also has NA's... why? 
+#df_tp %>% filter(is.na(Matrix)) %>% View()
 #looks like a few blanks and random lines with stuff we don't want. 
 #filtering to remove rows with NA's for results (below) should fix this. 
 
@@ -137,29 +135,27 @@ unique(df_tp_final$`Sample Type`)
 unique(df_tp_final$`Lab Dup`)
 unique(df_tp_final$`Analyte`)
 
-rm(df_tp, foo) #remove intermediate data frames
+rm(df_tp) #remove intermediate data frames
 ```
 
-- Check DateTimes
+Check DateTimes
+
 ```{r}
 # any missing dates?
-df_date_test <- df_tp_final %>% filter(is.na(Date_Time))
+#df_tp_final %>% filter(is.na(Date_Time)) %>% View()
 
-#getting an error on the line above
+# no missing dates
 
 # any missing times?
-df_time_test <- df_tp_final %>%
-  filter(format(Date_Time, '%H:%M:%S') == '00:00:00')
+#df_tp_final %>% filter(format(Date_Time, '%H:%M:%S') == '00:00:00') %>% View()
 
 #no missing date times
-
-rm(df_date_test, df_time_test)
 ```
-
 
 ### 2 - O&M
 
--Import O&M data (multiple files)
+Import O&M data (multiple files)
+
 ```{r}
 fp_aq1 <- abs_nutrient_path("O&M Data_CA Aquaduct Grab Sample_1.csv")
 df_aq1 <- read_csv(fp_aq1)
@@ -182,7 +178,8 @@ df_sba <- read_csv(fp_sba)
 rm(fp_aq1, fp_aq2, fp_aq3, fp_nba, fp_ofd, fp_sba) #remove file paths
 ```
 
--Combine data files
+Combine data files
+
 ```{r}
 df_om <- bind_rows(df_aq1, df_aq2, df_aq3, df_nba, df_ofd, df_sba) #combine all data files into one data frame
 
@@ -194,19 +191,18 @@ rm(df_aq1, df_aq2, df_aq3, df_nba, df_ofd, df_sba) #remove intermediate data fra
 # Perry: I like to for clutter reasons (after ensuring everything works correctly), but yeah, it's personal pref so long as you're not running into memory problems.
 ```
 
--Check/Format Data
+Check/Format Data
+
 ```{r}
 unique(df_om$Matrix) #only shows Water, Natural
 unique(df_om$`Sample Type`) #only shows Normal Samples
 unique(df_om$Analyte) #no other analytes present besides what we want
-foo = filter(df_om, is.na(Matrix))
+#df_om %>% filter(is.na(Matrix)) %>% View()
 #just junk columns left over at the end.
 
 unique(df_om$`Lab Dup`) #still some lab dups in there
 
-
-df_om_new <- df_om %>%
-  filter(!(str_detect(`Sample Code`, "^C"))) #remove the sample codes that start with a "C" (these belong to a different group and were not sampled by O&M - confirmed with data contact)
+df_om_new <- df_om %>% filter(!(str_detect(`Sample Code`, "^C"))) #remove the sample codes that start with a "C" (these belong to a different group and were not sampled by O&M - confirmed with data contact)
   
 df_om_final <- df_om_new %>%
   mutate(Date_Time = mdy_hm(`Collection Date`)) %>% #format date
@@ -220,29 +216,30 @@ unique(df_om_final$`Sample Type`)
 unique(df_om_final$Analyte) 
 unique(df_om_final$`Lab Dup`)
 
-rm(df_om, df_om_new, foo) #remove intermediate data frames
+
+rm(df_om, df_om_new) #remove intermediate data frames
 ```
 
-- Check DateTimes
+Check DateTimes
+
 ```{r}
 # any missing dates?
-df_date_test <- df_om_final %>% filter(is.na(Date_Time))
+#df_om_final %>% filter(is.na(Date_Time)) %>% View()
 
 # any missing times?
-df_time_test <- df_om_final %>%
-  filter(format(Date_Time, '%H:%M:%S') == '00:00:00') %>%
-  distinct(`Date_Time`,`Sample Code`)
+#df_om_final %>%
+  #filter(format(Date_Time, '%H:%M:%S') == '00:00:00') %>%
+  #distinct(`Date_Time`,`Sample Code`) %>% View()
 
 # a few missing times
 # TODO: follow up? or is it fine?
 #Morgan: I think it's probably fine for discrete
-
-rm(df_date_test, df_time_test)
 ```
 
 ### 3 - NDFS (DISE)
 
--Import NDFS data
+Import NDFS data
+
 ```{r}
 #looks like the first 1000 "Notes" fields were blank, so got read in as logical.
 fp_ndfs <- abs_nutrient_path("NDFS Data.csv")
@@ -251,7 +248,8 @@ df_ndfs <- read_csv(fp_ndfs, guess_max = 4000)
 rm(fp_ndfs) #remove file paths
 ```
 
--Check/Format data
+Check/Format data
+
 ```{r}
 unique(df_ndfs$Matrix) #only shows Water, Natural
 unique(df_ndfs$`Sample Type`) #shows Normal Samples and Duplicate Samples
@@ -266,34 +264,40 @@ df_dise_ndfs_final <- df_ndfs %>%
 
 rm(df_ndfs) #remove intermediate data frames
 ```
--Update Liberty Island station
+
+Update Liberty Island station
+
 ```{r}
-unique(df_dise_ndfs_final$`Short Station Name`)
-unique(df_dise_ndfs_final$`Station Number`)
+#df_dise_ndfs_final %>% distinct(`Short Station Name`, `Station Number`) %>% View()
 
-#DISE NDFS and WQA have the same coordinates but slightly different names for South Tip at Liberty Island - use WQA's station name and number
+#DISE NDFS and WQA have the same coordinates but slightly different names for South Tip at Liberty Island - use WQA's station name and number (confirmed this is okay with data contacts)
 
-df_dise_ndfs_final <- df_dise_ndfs_final %>%
-  mutate("Station Number" = recode(`Station Number`, "B9D81450411" = "B9D81461410")) #change to the WQA station number
+df_dise_ndfs_final <- df_dise_ndfs_final %>% 
+  # change to the WQA station number
+  mutate(
+    "Station Number" = if_else(
+      `Station Number` == "B9D81450411", 
+      "B9D81461410", `Station Number`
+    )
+  )
 ```
 
+Check DateTimes
 
-- Check DateTimes
 ```{r}
 # any missing dates?
-df_date_test <- df_dise_ndfs_final %>% filter(is.na(Date_Time))
+#df_dise_ndfs_final %>% filter(is.na(Date_Time)) %>% View()
 
 # any missing times?
-df_time_test <- df_dise_ndfs_final %>%
-  filter(format(Date_Time, '%H:%M:%S') == '00:00:00') %>%
-  distinct(`Date_Time`,`Sample Code`)
-
-rm(df_date_test, df_time_test)
+#df_dise_ndfs_final %>%
+  #filter(format(Date_Time, '%H:%M:%S') == '00:00:00') %>%
+  #distinct(`Date_Time`,`Sample Code`) %>% View()
 ```
 
 ### 4 - NCRO
 
--Import NCRO data (all projects combined into one file)
+Import NCRO data (all projects combined into one file)
+
 ```{r}
 fp_ncro <- abs_nutrient_path("NCRO Data.csv")
 df_ncro <- read_csv(fp_ncro, guess_max = 30000)
@@ -301,15 +305,16 @@ df_ncro <- read_csv(fp_ncro, guess_max = 30000)
 rm(fp_ncro) #remove file paths
 ```
 
--Add project names
+Add project names
+
 ```{r}
 unique(df_ncro$`Short Station Name`)
 unique(df_ncro$`Long Station Name`)
 
 # only NA is junk data; filter out
-df_NA_test <- df_ncro %>% filter(is.na(df_ncro$`Long Station Name`) | is.na(df_ncro$`Short Station Name`))
+df_ncro %>% filter(is.na(`Long Station Name`) | is.na(`Short Station Name`)) %>% View()
 
-df_ncro <- df_ncro %>% filter(!(is.na(df_ncro$`Long Station Name`) | is.na(df_ncro$`Short Station Name`))) # two fewer, as expected
+df_ncro <- df_ncro %>% filter(!(is.na(`Long Station Name`) | is.na(`Short Station Name`))) # two fewer, as expected
 
 #since all projects were exported from WDL in one file, we need to differentiate them based on station names
 
@@ -337,12 +342,13 @@ df_ndfs <- df_ncro %>%
 df_ncro_new <- bind_rows(df_sdtb, df_edb, df_rs, df_ndfs)
 ```
 
-- Double check all stations were assigned correctly
+Double check all stations were assigned correctly
+
 ```{r}
 # differing number of rows; ncro_new missing about 30 rows - fixed!
 nrow(df_ncro_new) == nrow(df_ncro)
 
-# same 3 missing
+# same 3 stations missing
 setdiff(df_ncro$`Long Station Name`, df_ncro_new$`Long Station Name`)
 setdiff(df_ncro$`Short Station Name`, df_ncro_new$`Short Station Name`)
 
@@ -354,9 +360,13 @@ setdiff(df_ncro$`Short Station Name`, df_ncro_new$`Short Station Name`)
                 # Other_col %in% c(<list of stations>) ~ <val to assign>,
                 # TRUE ~ NA)
               # )
+
+# Dave's additional tip: another method to streamline assigning projects is to create a lookup table
+# of station names and their assigned projects, then left_join to df_ncro
 ```
 
--Check/format data
+Check/format data
+
 ```{r}
 unique(df_ncro_new$Matrix) #only shows Water, Natural
 unique(df_ncro_new$`Sample Type`) #shows Normal Samples, Replicate Samples, and Duplicate Samples
@@ -378,25 +388,25 @@ df_ncro_final <- df_ncro_final %>%
 # check this filtered correctly
 unique(df_ncro_final$Analyte)
 
-rm(df_ncro, df_ndfs, df_ncro_new, df_sdtb, df_rs, df_edb, df_NA_test)
+rm(df_ncro, df_ndfs, df_ncro_new, df_sdtb, df_rs, df_edb)
 ```
 
-- Check DateTimes
+Check DateTimes
+
 ```{r}
 # any missing dates?
-df_date_test <- df_ncro_final %>% filter(is.na(Date_Time))
+#df_ncro_final %>% filter(is.na(Date_Time)) %>% View()
 
 # any missing times?
-df_time_test <- df_ncro_final %>%
-  filter(format(Date_Time, '%H:%M:%S') == '00:00:00') %>%
-  distinct(`Date_Time`,`Sample Code`)
-
-rm(df_date_test, df_time_test)
+#df_ncro_final %>%
+  #filter(format(Date_Time, '%H:%M:%S') == '00:00:00') %>%
+  #distinct(`Date_Time`,`Sample Code`) %>% View()
 ```
 
 ### 5 - AEU (WDL)
 
--Import AEU data (from WDL)
+Import AEU data (from WDL)
+
 ```{r}
 fp_aeu_wdl <- abs_nutrient_path("AEU Data_WDL.csv")
 df_aeu_wdl <- read_csv(fp_aeu_wdl)
@@ -404,7 +414,8 @@ df_aeu_wdl <- read_csv(fp_aeu_wdl)
 rm(fp_aeu_wdl) #remove file paths
 ```
 
--Filter for the years we want (AEU's EDI data only goes through 2021, so we need to get the 2022-2024 data from WDL)
+Filter for the years we want (AEU's EDI data only goes through 2021, so we need to get the 2022-2024 data from WDL)
+
 ```{r}
 df_wdl_new <- df_aeu_wdl %>% 
   mutate(Date_Time = mdy_hm(`Collection Date`)) %>% #format datetime column
@@ -414,7 +425,8 @@ df_wdl_new <- df_aeu_wdl %>%
 range(df_wdl_new$Date_Time) #confirm dates are now from Jan 2022 - Jun 2024
 ```
 
--Check/Format data
+Check/Format data
+
 ```{r}
 unique(df_wdl_new$Matrix) #only shows Water, Natural
 unique(df_wdl_new$`Sample Type`) #only shows Normal Samples 
@@ -430,9 +442,22 @@ df_aeu_wdl_final <- df_wdl_new %>%
 rm(df_wdl_new) #remove intermediate data frames (need to keep raw WDL data, df_aeu_wdl, for later)
 ```
 
+Check DateTimes
+
+```{r}
+# any missing dates?
+#df_aeu_wdl_final %>% filter(is.na(Date_Time)) %>% View()
+
+# any missing times?
+#df_aeu_wdl_final %>%
+  #filter(format(Date_Time, '%H:%M:%S') == '00:00:00') %>%
+  #distinct(`Date_Time`,`Sample Code`) %>% View()
+```
+
 ### 6 - WQA
 
--Import WQA discrete data file
+Import WQA discrete data file
+
 ```{r}
 fp_wqa <- abs_nutrient_path("WQA Discrete Data.csv")
 df_wqa <- read_csv(fp_wqa, guess_max = 20000)
@@ -441,7 +466,8 @@ df_wqa <- read_csv(fp_wqa, guess_max = 20000)
 rm(fp_wqa) #remove file paths
 ```
 
--Check/format data
+Check/format data
+
 ```{r}
 unique(df_wqa$Matrix) #only shows Water, Natural
 unique(df_wqa$`SampleType`) #only shows Normal Samples
@@ -458,11 +484,25 @@ df_wqa_final <- df_wqa %>%
 rm(df_wqa) #remove intermediate data frames
 ```
 
+Check DateTimes
+
+```{r}
+# any missing dates?
+#df_wqa_final %>% filter(is.na(Date_Time)) %>% View()
+
+# any missing times?
+#df_wqa_final %>%
+  #filter(format(Date_Time, '%H:%M:%S') == '00:00:00') %>%
+  #distinct(`Date_Time`,`Sample Code`) %>% View()
+# a few missing times
+```
+
 ## Non-WDL Data
 
 ### 1 - AEU (EDI)
 
--Import AEU data from EDI
+Import AEU data from EDI
+
 ```{r}
 #manual import
 #fp_aeu_edi <- abs_nutrient_path("AEU Data_EDI.csv")
@@ -471,11 +511,14 @@ rm(df_wqa) #remove intermediate data frames
 df_aeu_edi <- get_edi_file(1391, "nutr_wq_clean") #1391 is the EDI package ID, nutr_wq_clean is the file name
 ```
 
--Format columns and pivot (need to switch from wide to long format)
-```{r}
+Format columns and pivot (need to switch from wide to long format)
 
+```{r}
 df_aeu_new <- df_aeu_edi %>% 
-  mutate(Date_Time = parse_date_time(`datetime`, orders = c("Ymd HMS", "Ymd"))) %>% #format date, include both formats since some times missing
+  # mutate(Date_Time = ymd_hms(datetime)) %>% #format datetime column 
+  # Dave's note: converting the datetime column isn't necessary since its already formatted as a
+  # datetime. We just need to rename it so it matches the other Date_Time columns
+  rename(Date_Time = datetime) %>% 
   mutate(year = year(Date_Time)) %>% #add a year column
   filter(year > 2009) #get rid of anything prior to 2010
 
@@ -494,155 +537,242 @@ df_aeu_new <- df_aeu_edi %>%
 #   year = year(Date_Time)) %>% #add a year column
 #   filter(year > 2009) #get rid of anything prior to 2010
 
-unique(df_aeu_new$year) #confirm the data has only the years we want (lab data only goes through 2021)
+range(df_aeu_wdl_final$Date_Time)
+range(df_aeu_new$Date_Time)
+# There is some overlap between the WDL and EDI data - maybe these duplicates will be removed later?
 
 #only keep the columns/anlaytes we want (and their respective sign columns) - remove the rest
 df_aeu_new <- df_aeu_new %>%
   select(c("station_code", "event_id", "lab_comments", "diss_ammonia_sign", "diss_nitrate_nitrite_sign", "diss_orthophos_sign", "Date_Time", "year", "diss_ammonia", "diss_nitrate_nitrite", "don", "diss_orthophos", "tkn", "tot_phos")) %>%
   rename("Station_Name" = "station_code", "Sample Code" = "event_id") #rename station and sample ID columns
 
+# df_aeu_long <- pivot_longer(df_aeu_new, cols = c("diss_ammonia", "diss_nitrate_nitrite", "diss_orthophos", "tot_phos", "don", "tkn"), names_to = "Analyte", values_to = "Result", values_drop_na = TRUE) #pivot the six analyte columns we want to keep
 
-df_aeu_long = pivot_longer(df_aeu_new, cols = c("diss_ammonia", "diss_nitrate_nitrite", "diss_orthophos", "tot_phos", "don", "tkn"), names_to = "Analyte", values_to = "Result", values_drop_na = TRUE) #pivot the six analyte columns we want to keep
-
+# Dave's tip: I would suggest replacing all of the pivoting and code separating each analyte with
+  # the following more succinct and efficient code. Let me know if you want me to go over how this
+  # works.
+# Pivot the six analyte columns we want to keep to longer data structure
+df_aeu_comb <- df_aeu_new %>% 
+  # Add a value suffix to the columns that contain nutrient values
+  rename_with(
+    \(x) paste0(x, "_value"), 
+    c(diss_ammonia, diss_nitrate_nitrite, don, diss_orthophos, tkn, tot_phos)
+  ) %>% 
+  # Pivot analytes longer, creating a sign and value column for each analyte
+  pivot_longer(
+    cols = ends_with(c("sign", "value")),
+    names_to = c("Analyte", ".value"),
+    names_pattern = "(.*)_(.*)",
+    values_drop_na = TRUE
+  ) %>% 
+  mutate(
+    # Create a Detection Condition column and if there's a "<" in the sign column, make it say Not
+      # Detected, otherwise say Detected
+    Detection_Condition = case_match(
+      sign, 
+      "<" ~ "Not Detected", 
+      c("=", NA_character_) ~ "Detected"
+    ),
+    # Create an RL column and make it say the result if the detection column says "Not Detected",
+      # otherwise leave as NA
+    "Rpt Limit" = if_else(Detection_Condition == "Not Detected", value, NA_real_),
+    # If the value is not detected, change result to NA, otherwise leave the result
+    Result = if_else(Detection_Condition == "Not Detected", NA_real_, value),
+    # Remove the unwanted columns used within this mutate
+    .keep = "unused"
+  ) %>% 
+  # Rename all analyte names to match WDL format. Recode is superseeded by case_match, using that
+    # function instead
+  mutate(
+    Analyte = case_match(
+      Analyte, 
+      "diss_ammonia" ~ 'Dissolved Ammonia',
+      "diss_nitrate_nitrite" ~ 'Dissolved Nitrate + Nitrite',
+      "diss_orthophos" ~ 'Dissolved ortho-Phosphate',
+      "tkn" ~ 'Total Kjeldahl Nitrogen', 
+      "don" ~ 'Dissolved Organic Nitrogen', 
+      "tot_phos" ~ 'Total Phosphorus'
+    )
+  )
 ```
 
--For analytes with non-detects: split into individual data frames, format, then recombine
+For analytes with non-detects: split into individual data frames, format, then recombine - not necessary if you use the code above.
+
 ```{r}
-#Ammonia
-df_aeu_ammonia <- df_aeu_long %>%
-  filter(Analyte=='diss_ammonia') %>% #filter for the analyte we want
-  select(-c(diss_nitrate_nitrite_sign, diss_orthophos_sign)) #remove the unwanted analyte sign columns
-
-df_aeu_ammonia <- df_aeu_ammonia %>%
-  mutate(Detection_Condition = case_when(str_detect(diss_ammonia_sign, '<') ~ "Not Detected", #if there's a "<", then say Not Detected
-         .default = "Detected")) %>% #otherwise say Detected
-  mutate("Rpt Limit" = case_when(str_detect(Detection_Condition, 'Not Detected') ~ Result, #create a RL column and make it say the result if the detection column says "Not Detected"
-         .default = NA)) %>% #otherwise leave as NA
-  mutate(result2 = case_when(str_detect(Detection_Condition, 'Not Detected') ~ NA, #if the value is not detected, change result to NA
-         .default = Result)) %>% #otherwise leave the result
-  select(-c(Result, diss_ammonia_sign)) %>% #remove the old result column and old sign column
-  rename(Result = result2) #rename to just say Result
-
-#Nitrate Nitrite
-df_aeu_nitrate <- df_aeu_long %>%
-  filter(Analyte=='diss_nitrate_nitrite') %>% #filter for the analyte we want
-  select(-c(diss_ammonia_sign, diss_orthophos_sign)) #remove the unwanted analyte sign columns
-
-df_aeu_nitrate <- df_aeu_nitrate %>%
-  mutate(Detection_Condition = case_when(str_detect(diss_nitrate_nitrite_sign, '<') ~ "Not Detected", #if there's a "<", then Not Detected
-         .default = "Detected")) %>% #otherwise say Detected
-  mutate("Rpt Limit" = case_when(str_detect(Detection_Condition, 'Not Detected') ~ Result, #create a RL column and make it say the result if the detection column says "No"
-         .default = NA)) %>%
-  mutate(result2 = case_when(str_detect(Detection_Condition, 'Not Detected') ~ NA, #if the value is not detected, change result to NA
-         .default = Result)) %>% #otherwise leave the result
-  select(-c(Result, diss_nitrate_nitrite_sign)) %>% #remove the old result column and old sign column
-  rename(Result = result2) #rename to just say Result
-
-#Orthophosphate
-df_aeu_ortho <- df_aeu_long %>%
-  filter(Analyte=='diss_orthophos') %>% #filter for the analyte we want
-  select(-c(diss_ammonia_sign, diss_nitrate_nitrite_sign)) #remove the unwanted analyte detection columns
-
-df_aeu_ortho <- df_aeu_ortho %>%
-  mutate(Detection_Condition = case_when(str_detect(diss_orthophos_sign, '<') ~ "Not Detected", #if there's a "<", then Not Detected
-         .default = "Detected")) %>% #otherwise say Detected
-  mutate("Rpt Limit" = case_when(str_detect(Detection_Condition, 'Not Detected') ~ Result, #create a RL column and make it say the result if the detection column says "No"
-         .default = NA)) %>%
-  mutate(result2 = case_when(str_detect(Detection_Condition, 'Not Detected') ~ NA, #if the value is not detected, change it to NA
-         .default = Result)) %>% #otherwise leave the result
-  select(-c(Result, diss_orthophos_sign)) %>% #remove the old result column and old sign column
-  rename(Result = result2) #rename to just say Result
-
-#combine three analyte data frames back together
-df_aeu_NDs <- bind_rows(df_aeu_ammonia, df_aeu_nitrate, df_aeu_ortho)
-
-#rename all analyte names to match WDL format
-df_aeu_NDs <- df_aeu_NDs %>% 
-  mutate(analyte2 = recode(Analyte, diss_ammonia = 'Dissolved Ammonia', diss_nitrate_nitrite = 'Dissolved Nitrate + Nitrite', diss_orthophos =  'Dissolved ortho-Phosphate' )) %>%
-  select(-Analyte) %>% #remove old analyte column
-  rename(Analyte = analyte2) #rename new analyte column
-
-rm(df_aeu_ammonia, df_aeu_nitrate, df_aeu_ortho) #remove intermediate data frames
+# #Ammonia
+# df_aeu_ammonia <- df_aeu_long %>%
+#   filter(Analyte=='diss_ammonia') %>% #filter for the analyte we want
+#   select(-c(diss_nitrate_nitrite_sign, diss_orthophos_sign)) #remove the unwanted analyte sign columns
+# 
+# df_aeu_ammonia <- df_aeu_ammonia %>%
+#   mutate(Detection_Condition = case_when(str_detect(diss_ammonia_sign, '<') ~ "Not Detected", #if there's a "<", then say Not Detected
+#          .default = "Detected")) %>% #otherwise say Detected
+#   mutate("Rpt Limit" = case_when(str_detect(Detection_Condition, 'Not Detected') ~ Result, #create a RL column and make it say the result if the detection column says "Not Detected"
+#          .default = NA)) %>% #otherwise leave as NA
+#   mutate(result2 = case_when(str_detect(Detection_Condition, 'Not Detected') ~ NA, #if the value is not detected, change result to NA
+#          .default = Result)) %>% #otherwise leave the result
+#   select(-c(Result, diss_ammonia_sign)) %>% #remove the old result column and old sign column
+#   rename(Result = result2) #rename to just say Result
+# 
+# #Nitrate Nitrite
+# df_aeu_nitrate <- df_aeu_long %>%
+#   filter(Analyte=='diss_nitrate_nitrite') %>% #filter for the analyte we want
+#   select(-c(diss_ammonia_sign, diss_orthophos_sign)) #remove the unwanted analyte sign columns
+# 
+# df_aeu_nitrate <- df_aeu_nitrate %>%
+#   mutate(Detection_Condition = case_when(str_detect(diss_nitrate_nitrite_sign, '<') ~ "Not Detected", #if there's a "<", then Not Detected
+#          .default = "Detected")) %>% #otherwise say Detected
+#   mutate("Rpt Limit" = case_when(str_detect(Detection_Condition, 'Not Detected') ~ Result, #create a RL column and make it say the result if the detection column says "No"
+#          .default = NA)) %>%
+#   mutate(result2 = case_when(str_detect(Detection_Condition, 'Not Detected') ~ NA, #if the value is not detected, change result to NA
+#          .default = Result)) %>% #otherwise leave the result
+#   select(-c(Result, diss_nitrate_nitrite_sign)) %>% #remove the old result column and old sign column
+#   rename(Result = result2) #rename to just say Result
+# 
+# #Orthophosphate
+# df_aeu_ortho <- df_aeu_long %>%
+#   filter(Analyte=='diss_orthophos') %>% #filter for the analyte we want
+#   select(-c(diss_ammonia_sign, diss_nitrate_nitrite_sign)) #remove the unwanted analyte detection columns
+# 
+# df_aeu_ortho <- df_aeu_ortho %>%
+#   mutate(Detection_Condition = case_when(str_detect(diss_orthophos_sign, '<') ~ "Not Detected", #if there's a "<", then Not Detected
+#          .default = "Detected")) %>% #otherwise say Detected
+#   mutate("Rpt Limit" = case_when(str_detect(Detection_Condition, 'Not Detected') ~ Result, #create a RL column and make it say the result if the detection column says "No"
+#          .default = NA)) %>%
+#   mutate(result2 = case_when(str_detect(Detection_Condition, 'Not Detected') ~ NA, #if the value is not detected, change it to NA
+#          .default = Result)) %>% #otherwise leave the result
+#   select(-c(Result, diss_orthophos_sign)) %>% #remove the old result column and old sign column
+#   rename(Result = result2) #rename to just say Result
+# 
+# #combine three analyte data frames back together
+# df_aeu_NDs <- bind_rows(df_aeu_ammonia, df_aeu_nitrate, df_aeu_ortho)
+# 
+# #rename all analyte names to match WDL format
+# df_aeu_NDs <- df_aeu_NDs %>%
+#   # recode is superseeded by case_match, using that function instead
+#   mutate(
+#     analyte2 = case_match(
+#       Analyte, 
+#       "diss_ammonia" ~ 'Dissolved Ammonia',
+#       "diss_nitrate_nitrite" ~ 'Dissolved Nitrate + Nitrite',
+#       "diss_orthophos" ~ 'Dissolved ortho-Phosphate' )
+#   ) %>%
+#   select(-Analyte) %>% #remove old analyte column
+#   rename(Analyte = analyte2) #rename new analyte column
+# 
+# rm(df_aeu_ammonia, df_aeu_nitrate, df_aeu_ortho) #remove intermediate data frames
 ```
 
 ```{r}
-# check if any data was lost
-df_aeu_test <- df_aeu_long %>%
-  filter(Analyte %in% c('diss_ammonia','diss_nitrate_nitrite','diss_orthophos'))
-
-nrow(df_aeu_NDs) == nrow(df_aeu_test)
-
-rm(df_aeu_test)
+# # check if any data was lost
+# df_aeu_test <- df_aeu_long %>%
+#   filter(Analyte %in% c('diss_ammonia','diss_nitrate_nitrite','diss_orthophos'))
+# 
+# nrow(df_aeu_NDs) == nrow(df_aeu_test)
+# 
+# rm(df_aeu_test)
 ```
 
--Add data for the three non-detect analytes back into df_aeu_long
+Add data for the three non-detect analytes back into df_aeu_long - not necessary if you use the code above.
+
 ```{r}
-df_aeu_long2 <- df_aeu_long %>%
-  filter(!(Analyte == "diss_ammonia" | Analyte == "diss_nitrate_nitrite" | Analyte == "diss_orthophos")) %>% #remove data for the three analytes with NDs
-  select(-c(diss_ammonia_sign, diss_nitrate_nitrite_sign, diss_orthophos_sign)) %>% #remove old sign columns
-  add_column(Detection_Condition = "Detected") #add the detection condition column and have it all say detected, since there are no NDs
-
-df_aeu_comb <- bind_rows(df_aeu_NDs, df_aeu_long2) #combine data frames together
-
-df_aeu_comb <- df_aeu_comb %>%
-  mutate(analyte2 = recode(Analyte, tkn = 'Total Kjeldahl Nitrogen', don = 'Dissolved Organic Nitrogen', tot_phos =  'Total Phosphorus')) %>% #rename remaining analyte names to match WDL names
-  select(-Analyte) %>% #remove old analyte column
-  rename(Analyte = analyte2) #rename new analyte column
-  
-unique(df_aeu_comb$Analyte) #confirm the analyte names are correct
-
-rm(df_aeu_NDs, df_aeu_long, df_aeu_long2, df_aeu_new) #remove intermediate data frames
+# df_aeu_long2 <- df_aeu_long %>%
+#   filter(!(Analyte == "diss_ammonia" | Analyte == "diss_nitrate_nitrite" | Analyte == "diss_orthophos")) %>% #remove data for the three analytes with NDs
+#   select(-c(diss_ammonia_sign, diss_nitrate_nitrite_sign, diss_orthophos_sign)) %>% #remove old sign columns
+#   add_column(Detection_Condition = "Detected") #add the detection condition column and have it all say detected, since there are no NDs
+# 
+# df_aeu_comb <- bind_rows(df_aeu_NDs, df_aeu_long2) #combine data frames together
+# 
+# df_aeu_comb <- df_aeu_comb %>%
+#   mutate(
+#     analyte2 = case_match(
+#       Analyte, 
+#       "tkn" ~ 'Total Kjeldahl Nitrogen', 
+#       "don" ~ 'Dissolved Organic Nitrogen', 
+#       "tot_phos" ~ 'Total Phosphorus',
+#       .default = Analyte
+#     )
+#   ) %>% #rename remaining analyte names to match WDL names
+#   select(-Analyte) %>% #remove old analyte column
+#   rename(Analyte = analyte2) #rename new analyte column
+#   
+# unique(df_aeu_comb$Analyte) #confirm the analyte names are correct
+# 
+# rm(df_aeu_NDs, df_aeu_long, df_aeu_long2, df_aeu_new) #remove intermediate data frames
 ```
 
--Determine analytical methods used (from WDL data) and add into EDI data set
+Determine analytical methods used (from WDL data) and add into EDI data set
+
 ```{r}
-df_ammonia <- df_aeu_wdl %>%
-  filter(Analyte=='Dissolved Ammonia') #create a subset of data for just dissolved ammonia
+# Dave's tip: I would suggest replacing all of the code used to define analytical methods with the
+# following more succinct and efficient code. Let me know if you want me to go over how this works.
+df_methods <- df_aeu_wdl %>% 
+  distinct(Analyte, Method) %>% 
+  arrange(Analyte)
 
-unique(df_ammonia$Method) #look at the method/s used, only EPA 350.1 (DWR modified and not modified)
+# Methods used:
+# Dissolved Ammonia - only EPA 350.1 (DWR modified and not modified)
+# Dissolved Nitrate + Nitrite - only Std Method 4500-NO3-F (DWR modified and not modified)
+# Total Kjeldahl Nitrogen - only EPA 351.2 (DWR modified and not modified)
+# Total Phosphorus - only EPA 365.4 (DWR modified and not modified)
+# Dissolved Organic Nitrogen - only EPA 351.2/EPA 350.1 (D) (DWR modified and not modified)
+# Dissolved ortho-Phosphate - only EPA 365.1 (DWR modified and not modified)
 
-df_nitratenitrite <- df_aeu_wdl %>%
-  filter(Analyte=='Dissolved Nitrate + Nitrite') #create a subset of data for just dissolved ammonia
-
-unique(df_nitratenitrite$Method) #look at the method/s used, only Std Method 4500-NO3-F (DWR modified and not modified)
-
-df_tkn <- df_aeu_wdl %>%
-  filter(Analyte=='Total Kjeldahl Nitrogen') #create a subset of data for just TKN
-
-unique(df_tkn$Method) #look at the method/s used, only EPA 351.2 (DWR modified and not modified)
-
-df_phos <- df_aeu_wdl %>%
-  filter(Analyte=='Total Phosphorus') #create a subset of data for just total phosphorus
-
-unique(df_phos$Method) #look at the method/s used, only EPA 365.4 (DWR modified and not modified)
-
-df_don <- df_aeu_wdl %>%
-  filter(Analyte=='Dissolved Organic Nitrogen') #create a subset of data for just DON
-
-unique(df_don$Method) #look at the method/s used, only EPA 351.2/EPA 350.1 (D) (DWR modified and not modified)
-
-df_ortho <- df_aeu_wdl %>%
-  filter(Analyte=='Dissolved ortho-Phosphate') #create a subset of data for just dissolved orthophos
-
-unique(df_ortho$Method) #look at the method/s used, only EPA 365.1 (DWR modified and not modified)
-
-rm(df_ammonia, df_nitratenitrite, df_tkn, df_phos, df_don, df_ortho) #remove intermediate data frames
+# df_ammonia <- df_aeu_wdl %>%
+#   filter(Analyte=='Dissolved Ammonia') #create a subset of data for just dissolved ammonia
+# 
+# unique(df_ammonia$Method) #look at the method/s used, only EPA 350.1 (DWR modified and not modified)
+# 
+# df_nitratenitrite <- df_aeu_wdl %>%
+#   filter(Analyte=='Dissolved Nitrate + Nitrite') #create a subset of data for just dissolved ammonia
+# 
+# unique(df_nitratenitrite$Method) #look at the method/s used, only Std Method 4500-NO3-F (DWR modified and not modified)
+# 
+# df_tkn <- df_aeu_wdl %>%
+#   filter(Analyte=='Total Kjeldahl Nitrogen') #create a subset of data for just TKN
+# 
+# unique(df_tkn$Method) #look at the method/s used, only EPA 351.2 (DWR modified and not modified)
+# 
+# df_phos <- df_aeu_wdl %>%
+#   filter(Analyte=='Total Phosphorus') #create a subset of data for just total phosphorus
+# 
+# unique(df_phos$Method) #look at the method/s used, only EPA 365.4 (DWR modified and not modified)
+# 
+# df_don <- df_aeu_wdl %>%
+#   filter(Analyte=='Dissolved Organic Nitrogen') #create a subset of data for just DON
+# 
+# unique(df_don$Method) #look at the method/s used, only EPA 351.2/EPA 350.1 (D) (DWR modified and not modified)
+# 
+# df_ortho <- df_aeu_wdl %>%
+#   filter(Analyte=='Dissolved ortho-Phosphate') #create a subset of data for just dissolved orthophos
+# 
+# unique(df_ortho$Method) #look at the method/s used, only EPA 365.1 (DWR modified and not modified)
+# 
+# rm(df_ammonia, df_nitratenitrite, df_tkn, df_phos, df_don, df_ortho) #remove intermediate data frames
 ```
 
--Add methods to EDI data set
+Add methods to EDI data set
+
 ```{r}
-#create new data frame with analyte and method info
-df_methods <- data.frame(Analyte = c("Dissolved Ammonia", "Dissolved Nitrate + Nitrite", "Total Kjeldahl Nitrogen", "Total Phosphorus", "Dissolved Organic Nitrogen", "Dissolved ortho-Phosphate"),
-              Method = c("EPA 350.1","Std Method 4500-NO3-, F", "EPA 351.2", "EPA 365.4", "EPA 351.2/EPA 350.1", "EPA 365.1"))
+# Update data frame with analyte and method info by removing duplicates, revising method names slightly
+# df_methods2 <- data.frame(Analyte = c("Dissolved Ammonia", "Dissolved Nitrate + Nitrite", "Total Kjeldahl Nitrogen", "Total Phosphorus", "Dissolved Organic Nitrogen", "Dissolved ortho-Phosphate"),
+#               Method = c("EPA 350.1","Std Method 4500-NO3-, F", "EPA 351.2", "EPA 365.4", "EPA 351.2/EPA 350.1", "EPA 365.1"))
+
+df_methods <- df_methods %>% 
+  filter(!str_detect(Method, "DWR Modified")) %>% 
+  mutate(
+    Method = str_trim(str_remove_all(Method, "\\(D\\)|\\[1\\]\\*")),
+    Method = if_else(Analyte == "Dissolved Nitrate + Nitrite", "Std Method 4500-NO3-, F", Method)
+  )
 
 df_aeu_comb <- left_join(df_aeu_comb, df_methods, by = "Analyte") #use left join to add methods to EDI data based on Analyte
 
 # double check no NAs
-df_NA_test <- df_aeu_comb %>% filter(is.na('Method'))
-
+#df_aeu_comb %>% filter(is.na('Method')) %>% View()
 ```
 
--Add WDL station numbers to data (need this to get lat/longs added later)
+Add WDL station numbers to data (need this to get lat/longs added later)
+
 ```{r}
 unique(df_aeu_comb$Station_Name) #confirm which stations are in the data file 
 
@@ -655,19 +785,19 @@ df_aeu_comb <- df_aeu_comb %>%
   rename("Station Number" = Station_Number) #rename the station number column to match the WDL data
 
 # double check no NAs
-df_NA_test <- df_aeu_comb %>% filter(is.na('Station Number'))
+#df_aeu_comb %>% filter(is.na('Station Number')) %>% View()
 
-rm(df_aeu_station_numbers, df_NA_test)
+rm(df_aeu_station_numbers)
 ```
 
--Add sample codes from WDL data
+Add sample codes from WDL data
+
 ```{r}
 df_sample_codes <- df_aeu_wdl %>%
   select(c("Station Number", "Sample Code", "Collection Date", "Analyte")) %>% #only keep the columns we need
-  mutate(Date_Time = mdy_hm(`Collection Date`)) %>% #format date
-  select(-`Collection Date`) #remove old date time column
-
-df_sample_codes <- distinct(df_sample_codes) #get rid of repeated rows
+  mutate(Date_Time = mdy_hm(`Collection Date`), .keep = "unused") %>% #format date and remove old date time column
+  # select(-`Collection Date`)
+  distinct() #get rid of repeated rows
 
 df_aeu_comb <- left_join(df_aeu_comb, df_sample_codes, by = c("Station Number", "Date_Time", "Analyte"))
 
@@ -678,14 +808,14 @@ df_aeu_comb <- df_aeu_comb %>%
 rm(df_sample_codes)
 ```
 
--Add reporting limits to "Detected" data from WDL
+Add reporting limits to "Detected" data from WDL
+
 ```{r}
 df_RLs <- df_aeu_wdl %>%
   select(c("Station Number", "Sample Code", "Collection Date", "Analyte", "Rpt Limit")) %>%
-  mutate(Date_Time = mdy_hm(`Collection Date`)) %>% #format date
-  select(-`Collection Date`)
-
-df_RLs <- distinct(df_RLs)
+  mutate(Date_Time = mdy_hm(`Collection Date`), .keep = "unused") %>% #format date
+  # select(-`Collection Date`)
+  distinct()
 
 df_detected <- df_aeu_comb %>%
   filter(Detection_Condition == "Detected") %>% #filter for just the detected values
@@ -706,8 +836,8 @@ nrow(df_aeu_comb) == nrow(df_detected)+nrow(df_not_detected)
 rm(df_detected, df_not_detected, df_RLs)
 ```
 
+Format columns to match WDL data 
 
--Format columns to match WDL data 
 ```{r}
 df_aeu_edi_final <- df_aeu_comb %>%
   select(-year) %>% #remove the year column
@@ -717,12 +847,13 @@ df_aeu_edi_final <- df_aeu_comb %>%
 
 range(df_aeu_edi_final$Date_Time) #confirm data is from 2013-2021
 
-rm(df_aeu_comb, df_aeu_wdl, df_aeu_edi) #remove intermediate data frames
+rm(df_aeu_comb, df_aeu_wdl, df_aeu_edi, df_aeu_new) #remove intermediate data frames
 ```
 
 ### 2 - DEMP
 
--Import DEMP data and LSZ station lat/longs
+Import DEMP data and LSZ station lat/longs
+
 ```{r}
 fp_demp <- abs_nutrient_path("DEMP Data.csv")
 df_demp <- read_csv(fp_demp)
@@ -730,10 +861,11 @@ df_demp <- read_csv(fp_demp)
 fp_latlong <- abs_nutrient_path("DEMP_LSZ_LatLong.csv")
 df_latlong <- read_csv(fp_latlong)
 
-#rm(fp_demp, fp_latlong) #remove file paths
+rm(fp_demp, fp_latlong) #remove file paths
 ```
 
--Check data
+Check data
+
 ```{r}
 unique(df_demp$`Observed Property ID`) #confirm it includes only the six analytes we want
 unique(df_demp$`Lab: Analysis Method`) #look at list of analytical methods
@@ -741,7 +873,8 @@ unique(df_demp$`QC: Type`) #shows only NA, which means no blanks or dups are pre
 range(df_demp$`Observed DateTime`) #confirm dates are from 2010-2024
 ```
 
--Get LSZ station lat/longs added to lat/long column
+Get LSZ station lat/longs added to lat/long column
+
 ```{r}
 df_LSZ <- df_demp %>%
   filter(`Location ID` == "LSZ2" | `Location ID` == "LSZ6" | `Location ID` == "LSZ2-SJR" | `Location ID` == "LSZ6-SJR") %>% #keep LSZs only
@@ -761,10 +894,11 @@ unique(df_demp$`Location ID`) #confirm the LSZs are no longer in the data set
 df_demp <- bind_rows(df_demp, df_LSZ) #add LSZ data back into original data file
 ```
 
--Format columns
+Format columns
+
 ```{r}
 df_demp_new <- df_demp %>%
-  mutate(Date_Time = ymd_hms(`Observed DateTime`)) %>% #format date
+  mutate(Date_Time = ymd_hms(str_remove(`Observed DateTime`, "\\..+$"))) %>% #format date
   mutate(Detection_Condition = case_when(str_detect(`Lab: Detection Condition`, "NOT_DETECTED") ~ "Not Detected", #fix capitalization
          .default = "Detected")) %>% #otherwise say Detected
   select(c("Location ID", "Observed Property ID", "Date_Time", "Result Value", "Result Unit", "Activity Name", "Field: Comment", "Lab: Analysis Method", "Detection_Condition", "Lab: MDL", "Lab: MRL", "Lab: Comment", "Latitude", "Longitude", "EA_Reports To")) %>% #remove unwanted rows
@@ -775,20 +909,28 @@ df_demp_new <- df_demp %>%
 rm(df_demp, df_LSZ, df_latlong) #remove intermediate data frames
 ```
 
--Clean up method and analyte names
+Clean up method and analyte names
+
 ```{r}
 df_demp_methods <- df_demp_new %>%
   mutate(Method = str_remove(`Lab: Analysis Method`, "\\;.*"), .keep = "unused") #remove everything after and including the first ";"
 
-unique(df_methods$Method) %in% unique(df_demp_methods$Method) #confirm the method names are the same as those used in other data sets 
-
 #rename dissolved orthophosphate to match WDL data
 df_demp_methods <- df_demp_methods %>%
-  mutate(Analyte = recode(Analyte, "Dissolved Orthophosphate" = "Dissolved ortho-Phosphate"))
+  mutate(
+    Analyte = if_else(Analyte == "Dissolved Orthophosphate", "Dissolved ortho-Phosphate", Analyte)
+  )
 
+# confirm the method names are the same as those used in other data sets
+#df_methods %>% 
+  #full_join(df_demp_methods %>% distinct(Analyte, Method), keep = TRUE) %>% 
+  #drop_na(Analyte.y) %>% 
+  #arrange(Analyte.y) %>% View()
+# There are a few additional methods in the DEMP dataset not found in the others - not sure if this matters
 ```
 
--Deal with the Test America data that reports to the MDL (change to RL)
+Deal with the Test America data that reports to the MDL (change to RL)
+
 ```{r}
 df_TA <- df_demp_methods %>%
   filter(Date_Time > "2019-10-01" & Date_Time < "2020-04-01") #filter dates between Oct 2019 and Mar 2020, when Test America was used
@@ -817,7 +959,8 @@ rm(df_demp_methods, df_demp_new, df_TA, df_Bryte) #remove intermediate data fram
 
 ### 3 - FRP
 
--Import FRP data
+Import FRP data
+
 ```{r}
 #manual import
 #fp_frp <- abs_nutrient_path("FRP Data.csv")
@@ -826,7 +969,8 @@ rm(df_demp_methods, df_demp_new, df_TA, df_Bryte) #remove intermediate data fram
 df_frp <- get_edi_file(269, "nutrients_FRP2023") #269 is the EDI package ID, nutrients_FRP2023 is the file name
 ```
 
--Check data
+Check data
+
 ```{r}
 unique(df_frp$`Analyte`) #there are some additional analytes we will need to filter out
 unique(df_frp$`SampleType`) #normal samples, blank samples, replicate/duplicate samples
@@ -838,7 +982,8 @@ unique(df_frp$`SampleType`) #normal samples, blank samples, replicate/duplicate 
 #will need to combine date and time columns
 ```
 
--Add analytical methods
+Add analytical methods
+
 ```{r}
 df_frp_nutrients <- df_frp %>%
   filter(Analyte == "Dissolved Ammonia" | Analyte == "Dissolved Nitrate + Nitrite" | Analyte == "Dissolved Organic Nitrogen" | Analyte == "Dissolved ortho-Phosphate" | Analyte == "Total Kjeldahl Nitrogen" | Analyte == "Total Phosphorus")  %>% #only keep the analytes we want
@@ -855,10 +1000,11 @@ df_frp_methods <- left_join(df_frp_nutrients, df_methods, by = 'Analyte')
 #confirmed these were the methods used by FRP, based on the SOP on EDI
 ```
 
--Format/filter data
+Format/filter data
+
 ```{r}
 df_frp_new <- df_frp_methods %>%
-  mutate(Date = ymd(Date)) %>% #format the date column
+  # mutate(Date = ymd(Date)) %>% #format the date column - not necessary, column is already formatted as a date
   unite(col = "Date_Time", Date, StartTime, sep = " ", na.rm=TRUE) #combine date time columns, remove any times that were NA
 
 #Date_Time column is a character, need to format but there's a problem with having some of the times missing (can't format everything all at once) - use the parse_date_time function for this
@@ -880,23 +1026,24 @@ df_frp_final <- df_frp_new %>%
 #missing lab dups and description column, so should probably combine the FRP data after lab dups have been filtered out of WDL data
 
 # check no NA Date_Time
-df_date_test <- df_frp_final %>% filter(is.na(Date_Time))
+#df_frp_final %>% filter(is.na(Date_Time)) %>% View()
 
 # any missing times?
-df_time_test <- df_frp_final %>%
-  filter(format(Date_Time, '%H:%M:%S') == '00:00:00') %>%
-  distinct(`Date_Time`,`Sample Code`)
+#df_frp_final %>%
+  #filter(format(Date_Time, '%H:%M:%S') == '00:00:00') %>%
+  #distinct(`Date_Time`,`Sample Code`) %>% View()
 
 # TODO: quite a few, but fine?
 
-rm(df_frp, df_frp_new, df_frp_methods, df_frp_nutrients, df_date_test, df_time_test)
+rm(df_frp, df_frp_new, df_frp_methods, df_frp_nutrients, df_NA_test)
 ```
 
 ## Data Integration and Formatting
 
 ### Combine WDL Data
 
--Combine data sets from WDL (O&M, Tidal Parr, DISE-NDFS, NCRO, WQA, AEU-WDL)
+Combine data sets from WDL (O&M, Tidal Parr, DISE-NDFS, NCRO, WQA, AEU-WDL)
+
 ```{r}
 df_nutrients_WDL <- bind_rows(df_om_final, df_tp_final, df_dise_ndfs_final, df_ncro_final, df_aeu_wdl_final, df_wqa_final) #combine WDL data sets
 
@@ -910,7 +1057,8 @@ rm(df_om_final, df_tp_final, df_dise_ndfs_final, df_ncro_final, df_aeu_wdl_final
 
 ### Lab Duplicates
 
--Remove duplicates run by the laboratory
+Remove duplicates run by the laboratory
+
 ```{r}
 df_nutrients_WDL <- df_nutrients_WDL %>%
   filter(is.na(`Lab Dup`)) #get rid of all the lab dups, which have a "Y" in the Lab Dup column
@@ -923,74 +1071,89 @@ df_nutrients_WDL <- df_nutrients_WDL %>%
 
 ### Method Names
 
--Clean up method names
+Clean up method names
+
 ```{r}
-df_ammonia <- df_nutrients_WDL %>%
-  filter(Analyte=='Dissolved Ammonia') #create a subset of data for just dissolved ammonia
+# Dave's tip: I would suggest replacing all of the code used to check analytical methods with the
+# following more succinct and efficient code. Let me know if you want me to go over how this works.
+df_nutrients_WDL %>% 
+  distinct(Analyte, Method) %>% 
+  arrange(Analyte)
 
-unique(df_ammonia$Method) #look at the method/s used, only EPA 350.1 (DWR modified and not modified)
+# Methods used:
+# Dissolved Ammonia - only EPA 350.1 (DWR modified and not modified)
+# Dissolved Nitrate + Nitrite - only EPA 353.2 (O&M data from TA) and Std Method 4500-NO3-, F (DWR
+  # modified and not modified)
+# Total Kjeldahl Nitrogen - only EPA 351.2 (DWR modified and not modified)
+# Total Phosphorus - only EPA 365.4 (DWR modified and not modified)
+# Dissolved Organic Nitrogen - only EPA 351.2/EPA 350.1 (D) (DWR modified and not modified)
+# Dissolved ortho-Phosphate - only EPA 365.1 (DWR modified and not modified)
+# Dissolved Nitrate (O&M only) - only EPA 300.0 (some of it says 28 day hold, but applies to all data)
 
-df_nitratenitrite <- df_nutrients_WDL %>%
-  filter(Analyte=='Dissolved Nitrate + Nitrite') #create a subset of data for just dissolved nitrate + nitrite
-
-unique(df_nitratenitrite$Method) #look at the method/s used, only EPA 353.2 (O&M data from TA) and Std Method 4500-NO3-, F (DWR modified and not modified)
-
-df_tkn <- df_nutrients_WDL %>%
-  filter(Analyte=='Total Kjeldahl Nitrogen') #create a subset of data for just TKN
-
-unique(df_tkn$Method) #look at the method/s used, only EPA 351.2 (DWR modified and not modified)
-
-df_phos <- df_nutrients_WDL %>%
-  filter(Analyte=='Total Phosphorus') #create a subset of data for just total phosphorus
-
-unique(df_phos$Method) #look at the method/s used, only EPA 365.4 (DWR modified and not modified)
-
-df_don <- df_nutrients_WDL %>%
-  filter(Analyte=='Dissolved Organic Nitrogen') #create a subset of data for just DON
-
-unique(df_don$Method) #look at the method/s used, only EPA 351.2/EPA 350.1 (D) (DWR modified and not modified)
-
-df_ortho <- df_nutrients_WDL %>%
-  filter(Analyte=='Dissolved ortho-Phosphate') #create a subset of data for just dissolved orthophos
-
-unique(df_ortho$Method) #look at the method/s used, only EPA 365.1 (DWR modified and not modified) and Std Method 4500-P, F
-
-df_nitrate <- df_nutrients_WDL %>%
-  filter(Analyte=='Dissolved Nitrate') #create a subset of data for just dissolved nitrate (O&M only)
-
-unique(df_nitrate$Method) #look at the method/s used, only EPA 300.0 (some of it says 28 day hold, but applies to all data)
+# df_ammonia <- df_nutrients_WDL %>%
+#   filter(Analyte=='Dissolved Ammonia') #create a subset of data for just dissolved ammonia
+# 
+# unique(df_ammonia$Method) #look at the method/s used, only EPA 350.1 (DWR modified and not modified)
+# 
+# df_nitratenitrite <- df_nutrients_WDL %>%
+#   filter(Analyte=='Dissolved Nitrate + Nitrite') #create a subset of data for just dissolved nitrate + nitrite
+# 
+# unique(df_nitratenitrite$Method) #look at the method/s used, only EPA 353.2 (O&M data from TA) and Std Method 4500-NO3-, F (DWR modified and not modified)
+# 
+# df_tkn <- df_nutrients_WDL %>%
+#   filter(Analyte=='Total Kjeldahl Nitrogen') #create a subset of data for just TKN
+# 
+# unique(df_tkn$Method) #look at the method/s used, only EPA 351.2 (DWR modified and not modified)
+# 
+# df_phos <- df_nutrients_WDL %>%
+#   filter(Analyte=='Total Phosphorus') #create a subset of data for just total phosphorus
+# 
+# unique(df_phos$Method) #look at the method/s used, only EPA 365.4 (DWR modified and not modified)
+# 
+# df_don <- df_nutrients_WDL %>%
+#   filter(Analyte=='Dissolved Organic Nitrogen') #create a subset of data for just DON
+# 
+# unique(df_don$Method) #look at the method/s used, only EPA 351.2/EPA 350.1 (D) (DWR modified and not modified)
+# 
+# df_ortho <- df_nutrients_WDL %>%
+#   filter(Analyte=='Dissolved ortho-Phosphate') #create a subset of data for just dissolved orthophos
+# 
+# unique(df_ortho$Method) #look at the method/s used, only EPA 365.1 (DWR modified and not modified) and Std Method 4500-P, F
+# 
+# df_nitrate <- df_nutrients_WDL %>%
+#   filter(Analyte=='Dissolved Nitrate') #create a subset of data for just dissolved nitrate (O&M only)
+# 
+# unique(df_nitrate$Method) #look at the method/s used, only EPA 300.0 (some of it says 28 day hold, but applies to all data)
 
 unique(df_nutrients_WDL$Method)
 unique(df_nutrients_WDL$Analyte)
 
 df_nutrients_WDL <- df_nutrients_WDL %>%
-   mutate(methods2 = recode(Method, 
-                            "EPA 350.1 (DWR Modified) [1]*" = 'EPA 350.1', 
-                            "EPA 350.1 (D) [1]*" = 'EPA 350.1', 
-                            "Std Method 4500-NO3-F (DWR Modified) [1]*" = 'Std Method 4500-NO3-, F',
-                            "Std Method 4500-NO3-F [1]*"  = 'Std Method 4500-NO3-, F',
-                            "EPA 351.2/EPA 350.1 (D) (DWR Modified) [1]*" = 'EPA 351.2/EPA 350.1',
-                            "EPA 351.2/EPA 350.1 (D) [1]*" =  'EPA 351.2/EPA 350.1', 
-                            "EPA 365.4 (DWR Modified) [1]*" = "EPA 365.4",
-                            "EPA 365.4 [1]*" = "EPA 365.4", 
-                            "EPA 351.2 (DWR Modified) [1]*" = "EPA 351.2",
-                            "EPA 351.2 [1]*" = "EPA 351.2", 
-                            "EPA 365.1 DWR Modified [1]*" = "EPA 365.1",
-                            "EPA 365.1 [1]*" = "EPA 365.1",
-                            "EPA 300.0 28d Hold [1]*" = "EPA 300.0",
-                            "EPA 300.0 [1]*" = "EPA 300.0", 
-                            "EPA 353.2 [1]*" = "EPA 353.2")) %>% #clean up method names (will call out modified methods in metadata)
+  mutate(
+    methods2 = case_match(
+      Method,
+      c("EPA 350.1 (DWR Modified) [1]*", "EPA 350.1 (D) [1]*") ~ 'EPA 350.1',
+      c("Std Method 4500-NO3-F (DWR Modified) [1]*", "Std Method 4500-NO3-F [1]*") ~ 'Std Method 4500-NO3-, F',
+      c("EPA 351.2/EPA 350.1 (D) (DWR Modified) [1]*", "EPA 351.2/EPA 350.1 (D) [1]*") ~ 'EPA 351.2/EPA 350.1',
+      c("EPA 365.4 (DWR Modified) [1]*", "EPA 365.4 [1]*") ~ "EPA 365.4",
+      c("EPA 351.2 (DWR Modified) [1]*", "EPA 351.2 [1]*") ~ "EPA 351.2",
+      c("EPA 365.1 DWR Modified [1]*", "EPA 365.1 [1]*") ~ "EPA 365.1",
+      c("EPA 300.0 28d Hold [1]*", "EPA 300.0 [1]*") ~ "EPA 300.0",
+      "EPA 353.2 [1]*" ~ "EPA 353.2"
+    )
+  ) %>% #clean up method names (will call out modified methods in metadata)
   select(-Method) %>% #remove old method column
   rename(Method = methods2) #rename new method column
 
 unique(df_nutrients_WDL$Method) #confirm they look the way we want
 
-rm(df_ammonia, df_nitratenitrite, df_tkn, df_phos, df_don, df_ortho, df_nitrate)
+# rm(df_ammonia, df_nitratenitrite, df_tkn, df_phos, df_don, df_ortho, df_nitrate)
 ```
 
 ### Add FRP Data (Non-WDL)
 
--Adding now since it didn't have lab dups, and methods were clean, but still has field dups/blanks that need to be removed)
+Adding now since it didn't have lab dups, and methods were clean, but still has field dups/blanks that need to be removed)
+
 ```{r}
 names(df_frp_final) %in% names(df_nutrients_WDL)
 
@@ -1001,7 +1164,8 @@ rm(df_frp_final)
 
 ### Field Dups/Blanks
 
--Remove everything besides normal samples
+Remove everything besides normal samples
+
 ```{r}
 unique(df_nutrients_WDL$`Sample Type`)
 
@@ -1014,7 +1178,8 @@ df_nutrients_WDL <- df_nutrients_WDL %>%
 
 ### Non-Detects
 
--Deal with non-detect data
+Deal with non-detect data
+
 ```{r}
 df_nutrients_WDL <- df_nutrients_WDL %>%
   mutate(Detection_Condition = case_when(str_detect(Result, '<') ~ 'Not Detected', #create a detection column and make it say "Not Detected" if the result column contains a "<" symbol
@@ -1023,28 +1188,51 @@ df_nutrients_WDL <- df_nutrients_WDL %>%
          .default = Result)) %>% #otherwise leave the result as is
   select(-Result) %>% #remove the old result column
   rename(Result = result2) #rename new result column
+
+#deal with O&M issue where results are 0, but should be ND (contain J flag, which means MDL < result < RL)
+
+#first look at the sample with results = 0
+# df_nutrients_WDL %>%
+#   filter(Result == 0) %>%
+#   View()
+
+df_nutrients_WDL <- df_nutrients_WDL %>%
+  mutate(Detection_Condition = case_when((Result == 0) ~ "Not Detected", #when a result is 0, change the detection condition to "not detected"
+         .default = Detection_Condition)) %>% #otherwise leave the detection column as is
+  mutate(Result = case_when((Result == 0) ~ NA, #when a result is 0, change to NA
+         .default = Result)) #otherwise leave result as is
+
+#confirm the J flags were converted to NA, Not Detected
+df_nutrients_WDL %>%
+  filter(Notes == "J") %>%
+  View()
 ```
 
 ### Add AEU Data (Non-WDL)
 
--Check which values would be converted to NA
+Check which values would be converted to NA
+
 ```{r}
 check_non_numeric(df_nutrients_WDL, 'Result')
 
 check_non_numeric(df_aeu_edi_final, 'Result')
 ```
 
--Adding now since there were no lab/field dups, or blanks, the method names were clean, and the non-detects were already fixed 
+Adding now since there were no lab/field dups, or blanks, the method names were clean, and the non-detects were already fixed 
+
 ```{r}
 names(df_aeu_edi_final) %in% names(df_nutrients_WDL)
 
 #need to change Result columns to numeric before combining
 
+# mutate_at is superseeded - its easy enough to use a simple mutate here
 df_nutrients_WDL <- df_nutrients_WDL %>%
-  mutate_at('Result', as.numeric) #convert to numeric
+  # mutate_at('Result', as.numeric) #convert to numeric
+  mutate(Result = as.numeric(Result))
 
-df_aeu_edi_final <- df_aeu_edi_final %>%
-  mutate_at('Result', as.numeric) #convert to numeric
+# The Result column in df_aeu_edi_final is already numeric
+# df_aeu_edi_final <- df_aeu_edi_final %>%
+#   mutate_at('Result', as.numeric) #convert to numeric
 
 df_nutrients_comb <- bind_rows(df_nutrients_WDL, df_aeu_edi_final)
 
@@ -1053,7 +1241,8 @@ rm(df_aeu_edi_final, df_nutrients_WDL)
 
 ### Add Lat/Longs & Update Station Names 
 
--Use the master station list (duplicate stations removed) to add the lat/longs
+Use the master station list (duplicate stations removed) to add the lat/longs
+
 ```{r}
 fp_stations_discrete <- abs_nutrient_path("Discrete_Stations_Consolidated.csv")
 df_stations_discrete <- read_csv(fp_stations_discrete)
@@ -1099,10 +1288,10 @@ rm(df_frp, df_no_frp, df_no_frp_latlong, df_station_dup, df_gps_check, df_name_c
 rm(fp_stations_discrete) #remove file paths
 ```
 
-
 ### Add DEMP Data (Non-WDL)
 
--Adding now since no lab/field dups or blanks, method names were clean, non-detects were fixed, and lat/longs were present
+Adding now since no lab/field dups or blanks, method names were clean, non-detects were fixed, and lat/longs were present
+
 ```{r}
 #station numbers were missing from the DEMP data, so we need to add those first
 
@@ -1113,14 +1302,15 @@ df_demp_final <- left_join(df_demp_final, df_station_numbers, by = "Station_Name
 
 names(df_demp_final) %in% names(df_nutrients_comb) #confirm they have the same columns
 
-df_demp_final <- df_demp_final %>%
-  mutate_at('Result', as.numeric)  #convert DEMP result column to numeric
+# The Result column in df_aeu_edi_final is already numeric
+# df_demp_final <- df_demp_final %>%
+  # mutate_at('Result', as.numeric)  #convert DEMP result column to numeric
 
 #When you converted Longitude to numeric NA's happened, so this is to figure out why
 df_nutrients_combx <- df_nutrients_comb %>%
   mutate(Lat1 = as.numeric(Latitude)) %>% #convert latitude column to numeric
   mutate(Long1 = as.numeric(Longitude)) %>% #convert longitude column to numeric
-filter(is.na(Long1) & !is.na(Longitude)) 
+  filter(is.na(Long1) & !is.na(Longitude)) 
 
 unique(df_nutrients_combx$Longitude)
 #OH! THere is a space at the end of 'longitude' at station BET
@@ -1137,52 +1327,59 @@ unique(df_nutrients_comb$Project) #confirm all projects are included
 rm(df_demp_final, df_station_numbers, df_stations_discrete, df_nutrients_combx)
 ```
 
-
 ### Units
 
--Check units
+Check units
+
 ```{r}
-#dissolved ammonia
-df_ammonia <- df_nutrients_comb %>%
-  filter(Analyte=='Dissolved Ammonia') #create a subset of data for just dissolved ammonia
+# Dave's tip: I would suggest replacing all of the code used to check units and analytical methods
+# with the following more succinct and efficient code. Let me know if you want me to go over how
+# this works.
+df_nutrients_comb %>% 
+  distinct(Analyte, Method, Units) %>% 
+  arrange(Analyte, Method, Units) %>% View()
 
-unique(df_ammonia$Units) #has both mg/L as N and mg/L
-
-#dissolved nitrate + nitrite
-df_nitratenitrite <- df_nutrients_comb %>%
-  filter(Analyte=='Dissolved Nitrate + Nitrite') #create a subset of data for just dissolved nitrate + nitrite
-
-unique(df_nitratenitrite$Units) #has both mg/L as N and mg/L
-
-#TKN
-df_tkn <- df_nutrients_comb %>%
-  filter(Analyte=='Total Kjeldahl Nitrogen') #create a subset of data for just TKN
-
-unique(df_tkn$Units) #has both mg/L as N and mg/L
-
-#total phosphorus
-df_phos <- df_nutrients_comb %>%
-  filter(Analyte=='Total Phosphorus') #create a subset of data for just total phosphorus
-
-unique(df_phos$Units) #has both mg/L as P and mg/L
-
-#DON
-df_don <- df_nutrients_comb %>%
-  filter(Analyte=='Dissolved Organic Nitrogen') #create a subset of data for just DON
-
-unique(df_don$Units) #has both mg/L as N and mg/L
-
-#dissolved orthophosphate
-df_ortho <- df_nutrients_comb %>%
-  filter(Analyte=='Dissolved ortho-Phosphate') #create a subset of data for just dissolved orthophos
-
-unique(df_ortho$Units) #has both mg/L as P and mg/L
-
-#dissolved nitrate
-df_nitrate <- df_nutrients_comb %>%
-  filter(Analyte=='Dissolved Nitrate') #create a subset of data for just dissolved nitrate (O&M only)
-
-unique(df_nitrate$Units) #only has mg/L
+# #dissolved ammonia
+# df_ammonia <- df_nutrients_comb %>%
+#   filter(Analyte=='Dissolved Ammonia') #create a subset of data for just dissolved ammonia
+# 
+# unique(df_ammonia$Units) #has both mg/L as N and mg/L
+# 
+# #dissolved nitrate + nitrite
+# df_nitratenitrite <- df_nutrients_comb %>%
+#   filter(Analyte=='Dissolved Nitrate + Nitrite') #create a subset of data for just dissolved nitrate + nitrite
+# 
+# unique(df_nitratenitrite$Units) #has both mg/L as N and mg/L
+# 
+# #TKN
+# df_tkn <- df_nutrients_comb %>%
+#   filter(Analyte=='Total Kjeldahl Nitrogen') #create a subset of data for just TKN
+# 
+# unique(df_tkn$Units) #has both mg/L as N and mg/L
+# 
+# #total phosphorus
+# df_phos <- df_nutrients_comb %>%
+#   filter(Analyte=='Total Phosphorus') #create a subset of data for just total phosphorus
+# 
+# unique(df_phos$Units) #has both mg/L as P and mg/L
+# 
+# #DON
+# df_don <- df_nutrients_comb %>%
+#   filter(Analyte=='Dissolved Organic Nitrogen') #create a subset of data for just DON
+# 
+# unique(df_don$Units) #has both mg/L as N and mg/L
+# 
+# #dissolved orthophosphate
+# df_ortho <- df_nutrients_comb %>%
+#   filter(Analyte=='Dissolved ortho-Phosphate') #create a subset of data for just dissolved orthophos
+# 
+# unique(df_ortho$Units) #has both mg/L as P and mg/L
+# 
+# #dissolved nitrate
+# df_nitrate <- df_nutrients_comb %>%
+#   filter(Analyte=='Dissolved Nitrate') #create a subset of data for just dissolved nitrate (O&M only)
+# 
+# unique(df_nitrate$Units) #only has mg/L
 
 #everything except dissolved nitrate has two different units
 
@@ -1226,63 +1423,83 @@ unique(df_nitrate$Units) #only has mg/L
 # rm(df_ammonia_unit1, df_ammonia_unit2, df_nitrate_unit1, df_nitrate_unit2, df_tkn_unit1, df_tkn_unit2) #remove unit data frames
 ```
 
--Fix incorrect units
+Fix incorrect units
+
 ```{r}
-#dissolved ammonia 
-#method: EPA 350.1 (should be reported as mg/L as N, based on method)
-df_ammonia_unit <- df_ammonia %>%
-  mutate(Units = recode(Units, "mg/L" = "mg/L as N"))
+# Dave's tip: This can be more succinct with the following code:
+df_nutrients_comb <- df_nutrients_comb %>% 
+  mutate(
+    Units = case_match(
+      Analyte,
+      "Dissolved Ammonia" ~ "mg/L as N",
+      "Dissolved Nitrate" ~ "mg/L as N", # TODO (DB): not sure if this is correct, should it be mg/L as N? - MB: yes, changed to as N
+      "Dissolved Nitrate + Nitrite" ~ "mg/L as N",
+      "Dissolved Organic Nitrogen" ~ "mg/L as N",
+      "Dissolved ortho-Phosphate" ~ "mg/L as P",
+      "Total Kjeldahl Nitrogen" ~ "mg/L as N",
+      "Total Phosphorus" ~ "mg/L as P"
+    )
+  )
 
-unique(df_ammonia_unit$Units) #confirm all say mg/L as N
-
-#dissolved nitrate + nitrite
-#method: EPA 353.2, EPA 300.0, and Std Method 4500-NO3-, F (should be reported as mg/L as N, based on methods)
-df_nitrate_unit <- df_nitratenitrite %>%
-  mutate(Units = recode(Units, "mg/L" = "mg/L as N"))
-
-unique(df_nitrate_unit$Units) #confirm all say mg/L as N
-
-#TKN
-#method: EPA 351.2 (should be reported as mg/L as N, based on method)
-df_tkn_unit <- df_tkn %>%
-  mutate(Units = recode(Units, "mg/L" = "mg/L as N"))
-
-unique(df_tkn_unit$Units) #confirm all say mg/L as N
-
-#total phosphorus
-#methods: EPA 365.4 and 365.3 (should all be reported as mg/L as P, based on methods)
-df_phos_unit <- df_phos %>%
-  mutate(Units = recode(Units, "mg/L" = "mg/L as P"))
-
-unique(df_phos_unit$Units) #confirm all say mg/L as P
-
-#dissolved orthophosphate
-#methods: EPA 365.1, EPA 300.0, EPA 365.3 (should all be reported as mg/L as P, based on methods)
-df_ortho_unit <- df_ortho %>%
-  mutate(Units = recode(Units, "mg/L" = "mg/L as P"))
-
-unique(df_ortho_unit$Units) #confirm all say mg/L as P
-
-#DON
-#method: EPA 351.2/EPA 350.1 (should be reported as mg/L as N, based on method)
-df_don_unit <- df_don %>%
-  mutate(Units = recode(Units, "mg/L" = "mg/L as N"))
-
-unique(df_don_unit$Units) #confirm all say mg/L as N
-
-#combine back together
-df_nutrients_comb <- bind_rows(df_nitrate, df_ammonia_unit, df_nitrate_unit, df_tkn_unit, df_phos_unit, df_ortho_unit, df_don_unit)
-
-rm(df_ammonia, df_nitratenitrite, df_tkn, df_phos, df_don, df_ortho, df_nitrate) #remove analyte data frames
-rm(df_ammonia_unit, df_nitrate_unit, df_tkn_unit, df_phos_unit, df_ortho_unit, df_don_unit) #remove unit data frames
+# #dissolved ammonia 
+# #method: EPA 350.1 (should be reported as mg/L as N, based on method)
+# df_ammonia_unit <- df_ammonia %>%
+#   mutate(Units = recode(Units, "mg/L" = "mg/L as N"))
+# 
+# unique(df_ammonia_unit$Units) #confirm all say mg/L as N
+# 
+# #dissolved nitrate + nitrite
+# #method: EPA 353.2, EPA 300.0, and Std Method 4500-NO3-, F (should be reported as mg/L as N, based on methods)
+# df_nitrate_unit <- df_nitratenitrite %>%
+#   mutate(Units = recode(Units, "mg/L" = "mg/L as N"))
+# 
+# unique(df_nitrate_unit$Units) #confirm all say mg/L as N
+# 
+# #TKN
+# #method: EPA 351.2 (should be reported as mg/L as N, based on method)
+# df_tkn_unit <- df_tkn %>%
+#   mutate(Units = recode(Units, "mg/L" = "mg/L as N"))
+# 
+# unique(df_tkn_unit$Units) #confirm all say mg/L as N
+# 
+# #total phosphorus
+# #methods: EPA 365.4 and 365.3 (should all be reported as mg/L as P, based on methods)
+# df_phos_unit <- df_phos %>%
+#   mutate(Units = recode(Units, "mg/L" = "mg/L as P"))
+# 
+# unique(df_phos_unit$Units) #confirm all say mg/L as P
+# 
+# #dissolved orthophosphate
+# #methods: EPA 365.1, EPA 300.0, EPA 365.3 (should all be reported as mg/L as P, based on methods)
+# df_ortho_unit <- df_ortho %>%
+#   mutate(Units = recode(Units, "mg/L" = "mg/L as P"))
+# 
+# unique(df_ortho_unit$Units) #confirm all say mg/L as P
+# 
+# #DON
+# #method: EPA 351.2/EPA 350.1 (should be reported as mg/L as N, based on method)
+# df_don_unit <- df_don %>%
+#   mutate(Units = recode(Units, "mg/L" = "mg/L as N"))
+# 
+# unique(df_don_unit$Units) #confirm all say mg/L as N
+# 
+# #combine back together
+# df_nutrients_comb <- bind_rows(df_nitrate, df_ammonia_unit, df_nitrate_unit, df_tkn_unit, df_phos_unit, df_ortho_unit, df_don_unit)
+# 
+# rm(df_ammonia, df_nitratenitrite, df_tkn, df_phos, df_don, df_ortho, df_nitrate) #remove analyte data frames
+# rm(df_ammonia_unit, df_nitrate_unit, df_tkn_unit, df_phos_unit, df_ortho_unit, df_don_unit) #remove unit data frames
 ```
 
 ### Notes
 
--Combine Description and Notes columns
+Combine Description and Notes columns
+
 ```{r}
 df_nutrients_comb <- df_nutrients_comb %>%
-  unite(col = "Notes", Description, Notes, sep = ", ", na.rm=TRUE) #combine description and notes columns, remove any NAs
+  #combine description and notes columns, remove any NAs
+  unite(col = "Notes", Description, Notes, sep = ", ", na.rm = TRUE) %>% 
+  # Should probably convert all of the empty strings in Notes to NA
+  mutate(Notes = na_if(Notes, ""))
 ```
 
 ### Format Columns
@@ -1304,14 +1521,31 @@ quick_plot <- ggplot(df_nutrients_final, aes(x = Date_Time, y = Result, color= P
   facet_wrap(.~Analyte, ncol = 1)
 plot(quick_plot)
 
-#found extreme value of 129 mg/L for dissolved nitrate + nitrite collected by O&M (SWP Routine Monitoring) on 11/18/2014 
+#found extreme value of 129 mg/L for dissolved nitrate + nitrite collected by O&M (SWP Routine Monitoring) on 11/18/2014
+# df_nutrients_final %>% 
+#   arrange(desc(Result)) %>% 
+#   View()
 ```
 
 ### Data Checks/Cleaning
 
--Check ranges
+Check ranges
+
 ```{r}
-range(df_nutrients_final$Result)
+range(na.omit(df_nutrients_final$Result))
+
+# The min of the results is zero. There shouldn't be any values equal to zero in this dataset. - MB: fixed above in Non-Detects section
+# Investigate this further
+# df_nutrients_final %>% 
+#   filter(Result == 0) %>% 
+#   View()
+# There are 7 records collected at Lake Oroville that have values equal to zero. They appear to be
+# analyzed by Test America and are flagged with "J". Additionally, the 4 TKN records have notes that
+# state "Field data only".
+# TODO (DB): The 4 TKN records should most likely be removed, and the remaining 3 records may need
+# to be converted to Not Detected. Need to investigate this further.
+
+#Morgan: confirmed with data contact, these 7 records were analyzed at Test America, but have a J flag (<RL, >MDL) - these should be non-detects
 
 df_nutrients_clean <- df_nutrients_final %>%
   filter(Result < 50 | is.na(Result)) 
@@ -1326,47 +1560,63 @@ df_nutrients_clean <- df_nutrients_clean %>%
 rm(df_nutrients_comb, df_nutrients_final, df_methods)
 ```
 
-
 ### Plot Clean Data
 
-```{r Plots, fig.height=12, fig.width=15}
+```{r Plots2, fig.height=12, fig.width=15}
 quick_plot <- ggplot(df_nutrients_clean, aes(x = Date_Time, y = Result, color= Project)) +
   geom_point() + 
   theme_bw() +
   facet_wrap(.~Analyte, ncol = 2)
 plot(quick_plot)
-
-plot <- ggplot(df_nutrients_clean, aes(x = Date_Time, y = Result, color= Project)) +
-  geom_point() + 
-  theme_bw() +
-  facet_wrap(.~Analyte, ncol = 2)
-plot(plot)
-
 ```
 
+### Check for NA values
+
+```{r}
+# df_nutrients_clean %>% 
+#   summarize(across(everything(), \(x) sum(is.na(x)))) %>% 
+#   pivot_longer(everything()) %>% view()
+
+# Station_Number, Latitude, Longitude, Result, Reporting_Limit, and Notes columns all have some NA
+# values. Most of these are expected, but I'm not sure about Station_Number.
+
+# Which records have NA values for Station_Number?
+# df_nutrients_clean %>% 
+#   filter(is.na(Station_Number)) %>% 
+#   count(Project, Station_Name) %>% 
+#   arrange(Project, Station_Name) %>% 
+#   print(n = Inf)
+
+# Just the LSZ stations from DEMP, and the FRP records have NA values for the Station_Number. 
+# TODO (DB): is this okay? MB: yes, it's fine since they are "floating" stations and don't have broad water body numbers
+```
 
 ### Check duplicate Station/Date/Time/Analyte
 
 ```{r}
 # TODO: true duplicates, can remove
+# While the duplicated function works in this case, it doesn't allow for you to inspect the
+# duplicated pairs. I would suggest using the following code to look for duplicated records
 df_dups <- df_nutrients_clean %>%
-  filter(duplicated(.))
+  # filter(duplicated(.))
+  add_count(pick(all_of(names(.)))) %>% 
+  filter(n > 1) %>% 
+  arrange(Project, Sample_Code, Analyte)
 
 #remove all duplicated rows
-df_nutrients_clean <- df_nutrients_clean %>%
-  distinct()
+df_nutrients_clean <- df_nutrients_clean %>% distinct()
 
 unique(df_dups$Project)
 
 rm(df_dups)
 ```
 
-
 ```{r}
 # TODO: key duplicates; are these real?
 df_dups1 <- df_nutrients_clean %>%
-  count(Project, Station_Name, Date_Time, Analyte) %>%
-  filter(n > 1)
+  add_count(Project, Station_Name, Date_Time, Analyte) %>%
+  filter(n > 1) %>% 
+  arrange(Project, Station_Name, Date_Time, Analyte)
 
 unique(df_dups1$Project)#FRP, SWP, NCRO-SDTB, WQA, n=2-6
 
@@ -1374,25 +1624,29 @@ unique(df_dups1$Project)#FRP, SWP, NCRO-SDTB, WQA, n=2-6
 
 #check with sample code
 df_dups2 <- df_nutrients_clean %>%
-  count(Project, Station_Name, Date_Time, Analyte, Sample_Code) %>%
-  filter(n > 1)
+  add_count(Project, Station_Name, Date_Time, Analyte, Sample_Code) %>%
+  filter(n > 1) %>% 
+  arrange(Project, Sample_Code, Analyte)
 
 unique(df_dups2$Project) #same four projects as above, but n=2 for all 
+range(df_dups2$Date_Time)
 ```
-
 
 ```{r}
 # TODO: this one (without time) has slightly more matches; are they real?
 df_dups3 <- df_nutrients_clean %>%
   mutate(Date = as.Date(Date_Time)) %>%
-  count(Project, Station_Name, Date, Analyte) %>%
-  filter(n > 1)
+  add_count(Project, Station_Name, Date, Analyte) %>%
+  filter(n > 1) %>% 
+  arrange(Project, Station_Name, Date, Analyte)
 
 unique(df_dups3$Project) #same four projects
 
 rm(df_dups1, df_dups2, df_dups3)
 ```
--Remove additional lab dups (Lab Dup column only identifies lab dups going back to Dec 2012)
+
+Remove additional lab dups (Lab Dup column only identifies lab dups going back to Dec 2012)
+
 ```{r}
 # Define grouping variables for each unique duplicate pair
 grp_lab_dups <- c("Project", "Station_Name", "Date_Time", "Analyte", "Sample_Code")
@@ -1413,28 +1667,116 @@ df_nutrients_clean <- df_nutrients_clean %>%
   bind_rows(df_data_lab_dups)
 ```
 
-
 ### Round values
+
 ```{r}
-# TODO: check that this is valid rounding; use case_when if certain nutrients have more sig figs, or if its dif for dif programs
+# Look for Results with large numbers of digits after the decimal place
+withr::with_options(
+  list(max.print = 2000), 
+  print(sort(unique(as.character(df_nutrients_clean$Result))))
+)
+# There are some values that have 4 digits after the decimal place. Let's look at this more closely.
+df_nutrients_dec <- df_nutrients_clean %>% 
+  mutate(
+    Result_chr = as.character(Result),
+    Num_dec_place = str_length(str_remove(Result_chr, "^\\d*\\."))
+  )
+
+# Look at which Analytes have results with 4 digits after the decimal place
+df_nutrients_dec %>% 
+  count(Analyte, Num_dec_place) %>% 
+  filter(Num_dec_place > 3)
+# Diss Ammonia (n = 2), Diss Nitrate (n = 37), Diss N+N (n = 1), Diss ortho-P (n = 1)
+
+# Look at which Projects have results with 4 digits after the decimal place
+df_nutrients_dec %>% 
+  count(Project, Num_dec_place) %>% 
+  filter(Num_dec_place > 3)
+# DEMP (n = 1), O&M (n = 38), WQA (n = 2)
+
+# TODO (DB): Check if we are okay with the results with 4 digits after the decimal place
+
+# TODO: check that this is valid rounding; use case_when if certain nutrients have more sig figs, or
+# if its different for different programs
 #df_nutrients_clean <- df_nutrients_clean %>% mutate(Result = round(Result, 2),
                               #Reporting_Limit = round(Reporting_Limit, 2))
+
+# Also look at the number of digits after the decimal place for lat-long coordinates - these should
+# have about 6 digits
+sort(unique(as.character(df_nutrients_clean$Latitude)))
+sort(unique(as.character(df_nutrients_clean$Longitude)))
+# These all look good
+
+rm(df_nutrients_dec)
+```
+
+### Check collection times
+
+```{r}
+df_times <- df_nutrients_clean %>% 
+  mutate(
+    Hour = hour(Date_Time),
+    Minute = minute(Date_Time),
+    Second = second(Date_Time)
+  )
+
+# Check for samples collected at midnight
+df_times %>% 
+  filter(Hour == 0, Minute == 0, Second == 0) %>% 
+  count(Project)
+# FRP (n = 1750), O&M (n = 118), WQA (n = 109)
+# TODO (DB): These samples most likely did not have a collection time. We should consider adding a
+# Date column, and then convert the samples without collection times to NA. This is how we handle
+# this situation in discretewq. I think this is probably best because we can be more explicit about
+# the records without collection times. Currently someone can misinterpret these samples as being
+# collected at midnight.
+
+#convert missing times to NAs and add a date column
+df_nutrients_clean <- df_nutrients_clean %>%
+  mutate(Date = date(Date_Time)) %>%
+  mutate(Hour = hour(Date_Time), Minute = minute(Date_Time), Second = second(Date_Time)) %>%
+  mutate(time_sum = Hour + Minute + Second) %>%
+  mutate(date_test = case_when((time_sum == 0) ~ NA,  #if the time is 0:00, change it to NA
+                    .default = Date_Time)) %>%
+  select(-c(Hour, Minute, Second, time_sum, Date_Time)) %>%
+  rename(Date_Time = date_test)
+
+# Inspect collection times for oddities
+df_times %>% 
+  # Remove samples collected at midnight
+  filter(!(Hour == 0 & Minute == 0 & Second == 0)) %>% 
+  count(Project, Hour) %>% 
+  View()
+# TODO (DB): Tidal Parr, WQA, and YBFMP have some odd collection times (before 5 AM and after
+# 5 PM). We may want to inspect these further before publishing the data.
 ```
 
 ### Export as csv file
 
 ```{r}
+# Arrange data in an more organized way before export
+df_nutrients_exp <- df_nutrients_clean %>% arrange(Project, Date_Time, Analyte)
+
+#Reorder columns
+df_nutrients_exp <- df_nutrients_exp %>%
+  select(c("Project", "Station_Name", "Station_Number", "Latitude", "Longitude", "Sample_Code", "Date", "Date_Time", "Analyte", "Detection_Condition", "Result", "Units", "Reporting_Limit", "Method", "Notes"))
+
 fp_output_discrete <- abs_nutrient_path("../EDI Data Files/nutrient_data_discrete.csv")
+df_nutrients_exp %>% 
+  # Convert Date_Time to character to avoid having write_csv convert the time zone to UTC
+  mutate(Date_Time = format(Date_Time, format = "%Y-%m-%d %H:%M:%S")) %>%
+  write_csv(fp_output_discrete)
 
-#write_csv(df_nutrients_clean, fp_output_discrete)
+# Also export to GitHub repo as .rds file (compressed)
+df_nutrients_exp %>% saveRDS(here("data/processed/nutrient_data_discrete.rds"))
 ```
-
 
 ## Continuous Nutrient Data
 
 ### 1 - CEMP
 
--Import CEMP SUNA data
+Import CEMP SUNA data
+
 ```{r}
 fp_cemp_hood <- abs_nutrient_path("SRH_SUNA_data.csv")
 df_cemp_hood <- read_csv(fp_cemp_hood) #read in Hood data
@@ -1445,7 +1787,8 @@ df_cemp_vern <- read_csv(fp_cemp_vern) #read in Vernalis data
 rm(fp_cemp_hood, fp_cemp_vern) #remove file paths
 ```
 
--Add station names
+Add station names
+
 ```{r}
 df_cemp_hood <- df_cemp_hood %>%
   add_column(Station_Name = "C3A") #match the corresponding discrete station
@@ -1454,23 +1797,24 @@ df_cemp_vern <- df_cemp_vern %>%
   add_column(Station_Name = "C10A") #match the corresponding discrete station
 ```
 
--Combine data and format
+Combine data and format
+
 ```{r}
 df_cemp_suna <- bind_rows(df_cemp_hood, df_cemp_vern)
 
 df_cemp_suna <- df_cemp_suna %>%
-  mutate(Date_Time = parse_date_time(`TIMESTAMP`, orders = c("Ymd HMS", "Ymd"))) %>% #format date, include both formats since some times missing
-  add_column(Project = "Continuous EMP SUNA Real-Time Monitoring") %>% #add project column
-  rename(Result = NO3_ave) %>% #rename result column
-  select(-TIMESTAMP) #remove old date time column
+  # This isn't necessary because TIMESTAMP is already a datetime object, just need to rename it
+  # mutate(Date_Time = parse_date_time(`TIMESTAMP`, orders = c("Ymd HMS", "Ymd"))) %>% #format date, include both formats since some times missing
+  rename(Date_Time = TIMESTAMP, Result = NO3_ave) %>% #rename result column as well
+  add_column(Project = "Continuous EMP SUNA Real-Time Monitoring") #add project column
 
 rm(df_cemp_vern, df_cemp_hood)
 ```
 
-
 ### 2 - WQA
 
--Import WQA RTDF data
+Import WQA RTDF data
+
 ```{r}
 fp_rtdf_banks <- abs_nutrient_path("RTDF_Banks_NO3.csv")
 df_rtdf_banks <- read_csv(fp_rtdf_banks) #read in Banks data
@@ -1487,7 +1831,8 @@ df_rtdf_vern <- read_csv(fp_rtdf_vern) #read in Vernalis data
 rm(fp_rtdf_banks, fp_rtdf_gia, fp_rtdf_jones, fp_rtdf_vern) #remove file paths
 ```
 
--Add station names
+Add station names
+
 ```{r}
 df_rtdf_banks <- df_rtdf_banks %>%
   add_column(Station_Name = "Banks Headworks") %>% #match the corresponding discrete station
@@ -1503,12 +1848,13 @@ df_rtdf_vern <- df_rtdf_vern %>%
   add_column(Station_Name = "C10A") #match the corresponding discrete station
 ```
 
--Combine data and format
+Combine data and format
+
 ```{r}
 df_wqa_rtdf <- bind_rows(df_rtdf_banks, df_rtdf_gia, df_rtdf_jones, df_rtdf_vern)
 
 df_wqa_rtdf <- df_wqa_rtdf %>%
-  mutate(Date_Time = parse_date_time(`Datetime`, orders = c("mdY HM", "mdY"))) %>% #format date, include both formats since some times missing
+  mutate(Date_Time = parse_date_time(Datetime, orders = c("mdY HM", "mdY"))) %>% #format date, include both formats since some times missing
   add_column(Project = "WQA Real-Time Data and Forecasting") %>% #add project column
   rename(Result = NO3_mg_L) %>% #rename result column
   select(-Datetime) #remove old date time column
@@ -1518,20 +1864,23 @@ rm(df_rtdf_banks, df_rtdf_gia, df_rtdf_jones, df_rtdf_vern)
 
 ### Data Integration and Formatting
 
--Combine data from CEMP and WQA and format
+Combine data from CEMP and WQA and format
+
 ```{r}
 df_continuous_all <- bind_rows(df_cemp_suna, df_wqa_rtdf)
 
 df_continuous_final <- df_continuous_all %>%
   filter(!(is.na(Result))) %>% #remove NA results (confirmed this is missing data, not non-detect data)
-  select(c(Project, Station_Name, Date_Time, Result)) #reorder columns
+  select(c(Project, Station_Name, Date_Time, Result)) %>% #reorder columns
+  # Convert time zone to PST
+  mutate(Date_Time = force_tz(Date_Time, tzone = "Etc/GMT+8")) 
 
 rm(df_cemp_suna, df_wqa_rtdf, df_continuous_all)
 ```
 
-
 ### Plot Raw Data
-```{r Plots, fig.height=12, fig.width=12}
+
+```{r Plots rtm, fig.height=12, fig.width=12}
 quick_plot <- ggplot(df_continuous_final, aes(x = Date_Time, y = Result, color= Project)) +
   geom_point() + 
   theme_bw()+
@@ -1540,18 +1889,19 @@ plot(quick_plot)
 ```
 
 ### Data Checks/Cleaning
+
 ```{r}
 range(df_continuous_final$Date_Time) #check time frame
 
-range(df_continuous_final$Result) #found some negative values and really high values - (still need to confirm with data contact)
+range(df_continuous_final$Result) #found some negative values and really high values - confirmed these are not real by data contact
 
 df_continuous_clean <- df_continuous_final %>%
   filter(Result < 60 & Result > 0)
 ```
 
-
 ### Plot Clean Data
-```{r Plots, fig.height=12, fig.width=12}
+
+```{r Plots rtm2, fig.height=12, fig.width=12}
 quick_plot <- ggplot(df_continuous_clean, aes(x = Date_Time, y = Result, color= Project)) +
   geom_point() + 
   theme_bw()+
@@ -1562,12 +1912,32 @@ plot(quick_plot)
 ### Round values
 
 ```{r}
+# Look for Results with large numbers of digits after the decimal place
+sort(unique(as.character(df_continuous_clean$Result)))
+
+# There are some values that have 4 digits after the decimal place. Let's look at this more closely.
+df_continuous_dec <- df_continuous_clean %>% 
+  mutate(
+    Result_chr = as.character(Result),
+    Num_dec_place = str_length(str_remove(Result_chr, "^\\d*\\."))
+  )
+
+# Look at which Projects have results with 4 digits after the decimal place
+df_continuous_dec %>% 
+  count(Project, Num_dec_place) %>% 
+  filter(Num_dec_place > 3)
+# WQA (n = 11,244)
+
+# TODO (DB): Check if we are okay with the results with 4 digits after the decimal place
+
 # TODO: check that this is valid rounding; use case_when if certain nutrients have more sig figs, or if its dif for dif programs
 
 # I didn't run it because I know this is dif for dif continuous ones.
 
 # df_continuous_clean <- df_continuous_clean %>% mutate(Result = round(Result, 2),
 #                               Reporting_Limit = round(Reporting_Limit, 2))
+
+rm(df_continuous_dec)
 ```
 
 ### Check duplicate Station/Date/Time/Analyte
@@ -1575,24 +1945,27 @@ plot(quick_plot)
 ```{r}
 # none are fully duplicates
 df_dup_test <- df_continuous_clean %>%
-  filter(duplicated(.))
+  # filter(duplicated(.))
+  add_count(pick(all_of(names(.)))) %>% 
+  filter(n > 1) %>% 
+  arrange(Project, Station_Name, Date_Time)
 
 rm(df_dup_test)
 ```
 
-
 ```{r}
 # TODO: some have duplicate "keys"; are these real?
 dup_check1 <- df_continuous_clean %>%
-  count(Station_Name, Date_Time) %>%
-  filter(n > 1)
+  add_count(Station_Name, Date_Time) %>%
+  filter(n > 1) %>% 
+  arrange(Date_Time, Station_Name)
 
 unique(dup_check1$Station_Name)
 
 #only station that has dups is C10A, which is present in both the CEMP SUNA data and the WQA RTDF data - could just be overlap between projects
 
 dup_check2 <- df_continuous_clean %>%
-  count(Project, Station_Name, Date_Time) %>%
+  add_count(Project, Station_Name, Date_Time) %>%
   filter(n > 1)
 
 #confirmed, was just overlap between the two projects (no dups when project is included)
@@ -1601,10 +1974,20 @@ rm(dup_check1, dup_check2)
 ```
 
 ### Export as csv file
+
 ```{r}
-# fp_output_continuous <- abs_nutrient_path("../EDI Data Files/nutrient_data_continuous.csv")
+# Arrange data in an more organized way before export
+df_continuous_exp <- df_continuous_clean %>% arrange(Project, Station_Name, Date_Time)
 
-# write_csv(df_continuous_clean, fp_output_continuous)
+fp_output_continuous <- abs_nutrient_path("../EDI Data Files/nutrient_data_continuous.csv")
 
+# Use write_excel_csv instead because write_csv converts the time zone to UTC
+df_continuous_exp %>% 
+  # Convert Date_Time to character to avoid having write_csv convert the time zone to UTC
+  mutate(Date_Time = format(Date_Time, format = "%Y-%m-%d %H:%M:%S")) %>% 
+  write_csv(fp_output_continuous)
+
+# Also export to GitHub repo as .rds file (compressed)
+df_continuous_exp %>% saveRDS(here("data/processed/nutrient_data_continuous.rds"))
 ```
 
