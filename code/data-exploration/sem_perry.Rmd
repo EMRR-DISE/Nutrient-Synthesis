@@ -894,7 +894,6 @@ summary(psem_out, standardize = 'scale')
 library(lavaan)
 
 model <- '
-  # regression paths
     log_Chlorophyll ~ log_Salinity + 
     log_DissAmmonia +
     log_DissOrthophos +
@@ -903,7 +902,7 @@ model <- '
     Temp1 +
     Temp2 +
     Temp3
-    
+   
     log_DissAmmonia ~ lag_logDissAmmonia +
     Temp1 +
     log_DissOrthophos +
@@ -986,7 +985,11 @@ psem_gam <- psem(gam_chl, gam_amm, data = df_monthly_subset)
 summary(psem_gam, standardize = 'scale')
 ```
 
-Our results are very similar, which makes sense: - $R^2$ values are almost the same (though the GAM is slightly better) - linear coefficient and p-values are almost the same
+Our results are very similar, which makes sense:
+
+-   $R^2$ values are almost the same (though the GAM is slightly better)
+
+-   linear coefficient and p-values are almost the same
 
 However, the big difference is that Temperature is now included as a smooth function instead of multiple polynomial terms. This changes the shape of its partial effect curve:
 
@@ -1047,7 +1050,7 @@ ggplot(new_dat, aes(x = temp_seq, y = partial_centered)) +
 plot(gam_chl, select = 1)
 ```
 
-We note that the GAM more closely fits our original log_Chlorophyll \~ Temperature plot. We also note that our chi-square goodness of fit test is now significant, meaning this model (with a more correctly modeled Temperature) is a poorer fit, likely due to missing variables.
+They're similar, but the GAM function is more flexible (it also more closely fits our original log_Chlorophyll \~ Temperature plot; this makes sense if Temperature is an influential predictor). We also note that our chi-square goodness of fit test is now significant, meaning this model (with a more correctly modeled Temperature) is a poorer fit, possibly due to missing variables.
 
 This all being said, for practical purposes, the LMM gives us a similar overall picture to the GAM; both are valid.
 
