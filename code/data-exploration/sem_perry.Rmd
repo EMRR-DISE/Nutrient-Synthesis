@@ -1,6 +1,14 @@
 # Analysis Example
 
-Quick example showing the steps needed for analyzing data for SEM.
+This is a quick example of SEM analysis, covering data exploration + model creation + model interpretation.
+
+My models will be:
+
+$$\text{log_Chlorophyll} \sim \text{log_DissAmmonia} + \text{...} + \text{RE(Region)}$$
+
+$$\text{log_DissAmmonia} \sim \text{...} + \text{RE(Region)}$$
+
+I used the monthly nutrient data for this.
 
 ```{r}
 library(tidyverse)
@@ -14,32 +22,30 @@ options(contrasts = c('contr.sum', 'contr.poly'))
 source('code/functions/ns_funcs.R')
 ```
 
-# Read in data
-
 ```{r}
 fp_monthly <- abs_ns_path('Data/monthly_values.csv')
 df_monthly <- read_csv(fp_monthly) %>%
   mutate(Region = factor(Region),
          Date = make_date(Year, Month, 1)) %>%
   arrange(Region, Date)
-
-fp_seasonal <- abs_ns_path('Data/seasonal_values.csv')
-df_seasonal <- read_csv(fp_seasonal) %>%
-  mutate(Region = factor(Region))
 ```
 
-# Exploratory analysis (monthly)
+# Exploratory Analysis (Data)
+
+First we investigate our individual variables.
 
 ## Balance check
 
-How many samples do we have per region?
+When you have categorical variables (like Region), it's best to have balanced data -- the same number per category.
+
+How many samples do we have per Region?
 
 ```{r}
 df_monthly %>% 
   count(Region)
 ```
 
-Pretty even, but how many are non-NAs for relevant variables?
+Basically even, but how many are non-NAs for relevant variables?
 
 ```{r}
 df_monthly %>%
@@ -54,15 +60,15 @@ df_monthly %>%
   )
 ```
 
-There are missing values for certain analytes. The categories are:
+There are missing values for certain analytes. To group them:
 
-**balanced**: Temperature, Salinity, Turbidity, DissolvedOxygen, Inflows
+*balanced*: Temperature, Salinity, Turbidity, DissolvedOxygen, Inflows
 
-**relatively balanced (\>= 75%)**: Chlorophyll, pH, MVI
+*relatively balanced (\>= 75%)*: Chlorophyll, pH, MVI
 
-**missing data (Suisun Marsh)**: DissAmmonia, DissNitrateNitrite, DissOrthophos, DON, TKN, TotPhos
+*missing data (Suisun Marsh)*: DissAmmonia, DissNitrateNitrite, DissOrthophos, DON, TKN, TotPhos
 
-**missing a lot of data**: DissNitrate
+*missing a lot of data*: DissNitrate
 
 We can break this down by month to see if the missing data is interpolable or not:
 
@@ -111,29 +117,29 @@ plots
 
 Findings:
 
-**No data until 02-2017 for Suisun Marsh:** DON, DissAmmonia, DissNitrateNitrite, DissOrthophos, TKN, TotPhos
+*No data until 02-2017 (for Suisun Marsh):* DON, DissAmmonia, DissNitrateNitrite, DissOrthophos, TKN, TotPhos
 
 -   rest of missing data is interpolable
 
-**Lots of missing data:** DissNitrate
+*Lots of missing data:* DissNitrate
 
-**Large gaps until 06-2015:** MVI
+*Large gaps until 06-2015:* MVI
 
 -   all 5 month gaps between Jan-May
 
-**Missing after 01-2023 for Suisun Marsh/Suisun Bay:** pH
+*Missing after 01-2023 for Suisun Marsh/Suisun Bay:* pH
 
-**Small interpolable gaps:** Chlorophyll
+*Small interpolable gaps:* Chlorophyll
 
-**No gaps:** Temperature, Salinity, Turbidity, DissolvedOxygen, Inflows
+*No gaps:* Temperature, Salinity, Turbidity, DissolvedOxygen, Inflows
 
-## Discussion
+### Discussion
 
 A few analytes can be used for the entire 01-2010 through 06-2024 time range:
 
--   **Fully ready:** Temperature, Salinity, Turbidity, DissolvedOxygen, Inflows
+-   *Fully ready:* Temperature, Salinity, Turbidity, DissolvedOxygen, Inflows
 
--   **Needs minor interpolation:** Chlorophyll
+-   *Needs minor interpolation:* Chlorophyll
 
 A few could be used for the entire range (with minor interpolation) for all regions except Suisun Marsh. The options are:
 
@@ -157,18 +163,16 @@ MVI has multiple data gaps and some large, non-interpolable gaps. Options are si
 
 DissNitrate is missing large amounts of data and should be excluded.
 
-# Data Processing
+## Visualize distributions
 
-First I remove columns I won't be using for simplicity.
+Next, I'm removing columns I won't be using for simplicity.
 
 ```{r}
 df_monthly_rm <- df_monthly %>%
   select(-c(DissNitrate, DON, Microcystis, SJR_Inflow, Sac_Inflow, TKN, TotPhos))
 ```
 
-## Note Data Shape
-
-First I look at the shape of the variables to get a sense of what the data looks like.
+Now I look at the shape of variable distributions to get a sense of what the data looks like.
 
 ```{r}
 df_plt <- df_monthly_rm %>%
@@ -186,13 +190,13 @@ ggplot(df_plt, aes(x = Value)) +
   facet_wrap(~Analyte, scales = 'free')
 ```
 
-They're pretty much all appear right-skewed to various degrees except for temperature, which almost appears bivariate, and pH which is slightly left skewed. A few, like chlorophyll and pH, indicate outliers exist.
+They're pretty much all right-skewed to various degrees, except for Temperature (which almost appears bivariate) and pH, which is slightly left skewed. A few graphs, such as chlorophyll and pH, indicate outliers exist.
 
-## Note Outliers
+## Visualize outliers
 
-I next note extreme outliers. Even if they're real, they can influence regressions either by influencing the formula or inflating the error.
+Next, I like to note extreme outliers. Even if they're real data, they can negatively influence regressions either by influencing the coefficients or inflating the error.
 
-If, later on (eg. after model diagnostics), I decide to remove any of these, this is where I'd do it.
+If later on (eg. after model diagnostics) I decide to remove any of these, this is where I'd do it.
 
 ```{r}
 df_plt <- df_plt %>%
@@ -224,7 +228,7 @@ ggplot(df_plt, aes(x = 1, y = Value)) +
 
 ```
 
-There's a few, though none I would remove outright. However, further on I decided I wanted to remove a few extreme DissAmmonia, pH, Chlorophyll, and DissOrthophos values (7 total), which I'll do here:
+There's a few outliers, though none I would remove outright. However, further on I decided I wanted to remove a few extreme DissAmmonia, pH, Chlorophyll, and DissOrthophos values (7 total), which I'll do here:
 
 ```{r}
 df_monthly_rm <- df_monthly_rm %>%
@@ -235,11 +239,11 @@ df_monthly_rm <- df_monthly_rm %>%
            is.na(DissOrthophos))
 ```
 
-## Impute (Optional)
+## Impute NAs (optional)
 
 Next we'll impute missing data using a linear approximation. **If methods don't require a continuous, equally-spaced time series, this step is optional.** However, I like doing it (when feasible) to offset unbalanced design issues.
 
-If your data has non-detects, make sure to uniformally impute those values between (slightly larger than) 0 and the reporting limit.
+If your data has non-detects, make sure to uniformly impute those values between (slightly larger than) 0 and the reporting limit.
 
 ```{r}
 df_monthly_imputed <- df_monthly_rm %>%
@@ -300,10 +304,7 @@ for (r in regions) {
         labels = c('Observed', 'Imputed'),
         name = ''
       ) +
-      facet_wrap(~ variable, scales = 'free', ncol = 2) +
-      labs(
-        title = paste('Region:', r)
-      )
+      facet_wrap(~ variable, scales = 'free', ncol = 2)
 
   print(p)
 }
@@ -314,13 +315,19 @@ df_monthly_imputed <- df_monthly_imputed %>%
 
 ```
 
-## Transform
+# Exploratory Analysis (Relationships)
 
-Next we transform the data. Here I do:
+Next we can explore the relationships between our variables, primarily the response and its possible predictors, to determine what should go in our models.
 
--   log transforms: helps stabilize variance, fits certain data patterns
+Since SEMs are comprised of multiple "sub models", this step takes a while, since it's important to do this **for every response variable**. For simplicity, since log_Chlorophyll is my main response, I'll only examine it in these examples.
 
--   AR1 lag terms: so previous time's value can be used in regressions. I just do this for response variables (Chlorophyll, log_Chlorophyll, and later log_DissAmmonia).
+## Transform/modify data (optional)
+
+If you know you're likely to transform/modify the data, you can do it here so you have those columns for further exploratory analysis. Here I:
+
+-   add log transforms: helps stabilize variance, fits certain data patterns
+
+-   add AR1 lag terms: this is so the previous time point can be used in regressions. I just do this for response variables (log_Chlorophyll and (for later) log_DissAmmonia).
 
 ```{r}
 # log data
@@ -347,19 +354,9 @@ df_monthly_log <- df_monthly_log %>%
          .after = last_col())
 ```
 
-# Model Construction
-
-Now we can figure out what analytes we want in our models.
-
-SEMs are essentially composed of multiple linked models. **For each one, it's important to carry out the next few steps (Variable Relationships and Test Models).**
-
-Since Chla is my main response variable, I'll be sticking to that in these examples.
-
-# Variable Relationships
-
 ## Correlations
 
-First we look to see if any of our data is highly correlated (or not) since it can inform what we use in the model.
+First we examine if any of our data is highly correlated (or not); high correlation between variables is an issue causal inference models.
 
 ```{r}
 corrplot::corrplot(
@@ -382,9 +379,11 @@ corrplot::corrplot(
 
 DissolvedOxygen and Temperature are strongly negatively correlated; DO is also correlated with DissNitrateNitrite. Temp is also slightly correlated with DissAmmonia and, more strongly, DissNitrateNitrite. DON/DissNitrateNitrite and Turbidity/Total Inflow are moderately correlated, which makes sense.
 
-## Bivariate (Continuous)
+The strong DissolvedOxygen/Temperature relationship likely warrants further investigation (ie. determining their relationship/causal structure with respect to other variables).
 
-Next we graph our explanatory variables against our response variable. I like to look at the raw points (to get a true sense of the data) and interpolated splines to understand the shape of relationship, including by region since that's a possible variable.
+## Bivariate Plots (Continuous)
+
+Next we graph our explanatory variables against our response variable. I like to look at the raw points (to get a true sense of the data) and interpolated splines to understand the functional relationship.
 
 I ended up using log_Chlorophyll as my response, but kept the Chlorophyll graphs for reference.
 
@@ -456,37 +455,13 @@ ggplot(df_plt_log) +
   facet_wrap(~Analyte, scales = 'free_x')
 ```
 
-### Splines (Regional)
+From these, I decided to keep log_DissAmmonia, log_Turbidity, Salinity, and Temperature in my model. I also added log_DissOrthophosphate since I think it's usually considered an important variable and the lag term (lag_logChlorophyll) to account for autocorrelation. Note that Temperature appears to have a non-linear, almost cubic relationship with log_Chlorophyll.
 
-```{r}
-ggplot(df_plt) +
-  geom_smooth(aes(Value, Chlorophyll, color = Region)) +
-  facet_wrap(~Analyte, scales = 'free_x')
-```
-
-```{r}
-ggplot(df_plt_log) +
-  geom_smooth(aes(Value, Chlorophyll, color = Region)) +
-  facet_wrap(~Analyte, scales = 'free_x')
-```
-
-```{r}
-ggplot(df_plt) +
-  geom_smooth(aes(Value, log_Chlorophyll, color = Region)) +
-  facet_wrap(~Analyte, scales = 'free_x')
-```
-
-```{r}
-ggplot(df_plt_log) +
-  geom_smooth(aes(Value, log_Chlorophyll, color = Region)) +
-  facet_wrap(~Analyte, scales = 'free_x')
-```
-
-From these, I decided to keep log_DissAmmonia, Total_Inflow, and Temperature in my model. I also added log_DissOrthophosphate since I think it's usually considered an important variable. Note that Temperature appears to have a cubic relationship with log_Chlorophyll.
+I'm also adding log_Salinity over Salinity, which is probably wrong, but it's useful for the SEM examples.
 
 ## Bivariate (Categorical)
 
-It's also worth seeing how chlorophyll is influenced by categorical variables, in this case region:
+It's also worth seeing how chlorophyll correlates with categorical variables, in this case Region:
 
 ```{r}
 ggplot(df_plt) +
@@ -498,13 +473,43 @@ ggplot(df_plt) +
   geom_violin(aes(Region, Chlorophyll, fill = Region))
 ```
 
-South Central has the most variance, followed by Suisun Marsh. The other regions seem similarly distributed.
+South Central has the most variance, followed by Suisun Marsh. The other regions seem similarly distributed. Overall, the means are similar.
 
-# Test Models
+## Trivariate (Cat./Cont.)
 
-Since SEMs are a series of related models (with shared covariance), it's worth it to check each sub-model individually. For traditional SEMs, only `lm` (fixed effects) models can be used, though piecewiseSEM can handle other model types. Here, I used linear mixed effects models.
+You can also visualize potential interaction effects between categorical and continuous variables (or cat:cat, though cont:cont is much more difficult; it's easier to choose those via model selection). If the relationship between the response and continuous predictor appears to change based on the categorical one, the interaction may be significant.
 
-For simplicity, I subset the data from 02-01-2017 to 12-31-2022 to escape issues with unbalanced regional data. I also added three new variables: centered Temperature and the squared/cubed versions of it. This is so I correctly model Temperature's likely non-linear dependence on Chlorophyll.
+```{r}
+ggplot(df_plt) +
+  geom_smooth(aes(Value, Chlorophyll, color = Region)) +
+  facet_wrap(~Analyte, scales = 'free_x')
+```
+
+```{r}
+ggplot(df_plt_log) +
+  geom_smooth(aes(Value, Chlorophyll, color = Region)) +
+  facet_wrap(~Analyte, scales = 'free_x')
+```
+
+```{r}
+ggplot(df_plt) +
+  geom_smooth(aes(Value, log_Chlorophyll, color = Region)) +
+  facet_wrap(~Analyte, scales = 'free_x')
+```
+
+```{r}
+ggplot(df_plt_log) +
+  geom_smooth(aes(Value, log_Chlorophyll, color = Region)) +
+  facet_wrap(~Analyte, scales = 'free_x')
+```
+
+Here, no interaction effect particularly stands out. This makes sense, since Region is more of a grouping variable (which is why we'll likely use it as a random effect).
+
+# Individual Models
+
+Since SEMs are a series of related models (with shared covariance), it's worth checking each sub-model individually. For traditional SEMs, only `lm` (fixed effects) models can be used, though piecewiseSEM can handle other model types. Here, I used linear mixed effects models.
+
+For simplicity, I subset the data from 02-01-2017 to 12-31-2022 to escape issues with unbalanced regional data. I also added three new variables: three basis splines for Temperature. This is so I correctly model Temperature's likely non-linear dependence on Chlorophyll; with three terms, I'm assuming it's cubic.
 
 I also remove some extreme outliers I found in the model.
 
@@ -516,11 +521,16 @@ df_monthly_subset <- df_monthly_subset %>%
   slice(-c(5, 337))
 
 df_monthly_subset <- df_monthly_subset %>%
-  mutate(       
-    Temperature_c = scale(Temperature, center = TRUE, scale = FALSE)[,1],
-    Temperature2 = Temperature_c^2,
-    Temperature3 = Temperature_c^3
+  mutate(
+    Temp_poly = poly(Temperature, 3),
+    Temp1 = Temp_poly[,1],
+    Temp2 = Temp_poly[,2],
+    Temp3 = Temp_poly[,3]
     )
+
+# clean dataframe
+df_monthly_subset <- df_monthly_subset %>%
+  select(-contains('_poly'))
 
 df_monthly_subset <- df_monthly_subset %>%
   drop_na(log_Chlorophyll, log_Salinity, log_DissAmmonia, log_DissOrthophos, log_Turbidity,
@@ -529,14 +539,14 @@ df_monthly_subset <- df_monthly_subset %>%
 
 ## LMM - Chla
 
-### Test vs Train split
+### Testing/Training
 
 *Usually not needed for causal inference, mostly just doing as a quick check that the model makes sense. Will re-run with full dataset.*
 
-Temperature looked cubic to me, so I centered it and added polynomial terms. It's coefficients must be interpreted together to give you the slope of T, which is not a constant (B_1 + 2B_2(T_c) + 3B_3(T_c\^2)).
+First I'll create a model based on training data and see how well it predicts my testing data. Temperature looked cubic to me, so I added cubic basis splines.
 
 ```{r}
-# --- split testing/training ---
+# -- split testing/training --
 sorted_dates <- sort(unique(df_monthly_subset$Date))
 
 cut_idx <- floor(0.8 * length(sorted_dates))
@@ -548,30 +558,29 @@ df_train <- df_monthly_subset %>% filter(Date %in% train_dates)
 df_test  <- df_monthly_subset %>% filter(Date %in% test_dates)
 
 # -- training model --
-fit_main <- lmer(
+fit_chl <- lmer(
   log_Chlorophyll ~ 
     log_Salinity + 
     log_DissAmmonia +
     log_DissOrthophos +
     log_Turbidity +
     lag_logChlorophyll +
-    pH +
-    Temperature_c +
-    Temperature2 +
-    Temperature3 +
+    Temp1 +
+    Temp2 +
+    Temp3 +
     (1|Region),
   data = df_train,
   na.action = na.omit
 )
 
-summary(fit_main)
+summary(fit_chl)
 
 # -- predicted model --
 df_test <- df_test %>%
   drop_na(log_Chlorophyll, log_Temperature, log_DissAmmonia, log_Total_Inflow)
 
 df_test <- df_test %>%
-  mutate(pred_log_Chl = predict(fit_main, newdata = df_test))
+  mutate(pred_log_Chl = predict(fit_chl, newdata = df_test))
 
 # -- plot --
 rng <- range(c(df_test$pred_log_Chl, df_test$log_Chlorophyll), na.rm = TRUE)
@@ -587,14 +596,6 @@ ggplot(df_test, aes(x = pred_log_Chl, y = log_Chlorophyll)) +
     title = 'Predicted vs Observed'
   ) +
   theme_minimal()
-
-RMSE <- sqrt(mean((df_test$log_Chlorophyll - df_test$pred_log_Chl)^2))
-MAE  <- mean(abs(df_test$log_Chlorophyll - df_test$pred_log_Chl))
-bias <- mean(df_test$pred_log_Chl - df_test$log_Chlorophyll)
-
-print(RMSE); print(MAE); print(bias)
-
-plot(fit_main)
 ```
 
 Looks pretty good! It does overestimate, but it's a consistent offset and not horribly off.
@@ -602,70 +603,110 @@ Looks pretty good! It does overestimate, but it's a consistent offset and not ho
 Next is model diagnostics:
 
 ```{r}
-plot(acf(residuals(fit_main)))
-plot(pacf(residuals(fit_main)))
+RMSE <- sqrt(mean((df_test$log_Chlorophyll - df_test$pred_log_Chl)^2))
+MAE  <- mean(abs(df_test$log_Chlorophyll - df_test$pred_log_Chl))
+bias <- mean(df_test$pred_log_Chl - df_test$log_Chlorophyll)
+
+print(RMSE); print(MAE); print(bias)
 ```
 
 ```{r}
-infl <- performance::check_outliers(fit_main)
+varcomp <- as.data.frame(VarCorr(fit_chl))
+var_re  <- varcomp$vcov[varcomp$grp == 'Region']
+var_res <- varcomp$vcov[varcomp$grp == 'Residual']
+
+ICC <- var_re / (var_re + var_res)
+
+print(ICC)
+```
+
+```{r}
+plot(fit_chl)
+```
+
+```{r}
+plot(acf(residuals(fit_chl)))
+plot(pacf(residuals(fit_chl)))
+```
+
+```{r}
+infl <- performance::check_outliers(fit_chl)
 infl
 ```
 
 ```{r}
-res <- residuals(fit_main)
+res <- residuals(fit_chl)
 
 qqnorm(res)
 qqline(res, col = 'red', lwd = 2)
 ```
 
-Model diagnostics look pretty good; slight autocorrelation at the 15th lag that's indicates minor model misspecification, and there's some right-tail skew, but neither are particularly noteworthy.
+Model diagnostics look pretty good; slight autocorrelation at the ~17th lag indicates minor model misspecification, and there's some right-tail skew, but neither are particularly noteworthy. The lags do show some seasonality but it's not significant.
 
 ### Full model
 
-Now we run the model:
+Now we run the full model:
 
 ```{r}
-fit_main <- lmer(
+fit_chl <- lmer(
   log_Chlorophyll ~ 
     log_Salinity + 
     log_DissAmmonia +
     log_DissOrthophos +
     log_Turbidity +
     lag_logChlorophyll +
-    log_pH +
-    Temperature_c +
-    Temperature2 +
-    Temperature3 +
+    Temp1 +
+    Temp2 +
+    Temp3 +
     (1|Region),
   data = df_monthly_subset,
   na.action = na.omit
 )
 
-summary(fit_main)
-plot(fit_main)
+summary(fit_chl)
 ```
 
 The coefficients are similar, which is expected.
 
+Model diagnostics:
+
 ```{r}
-plot(acf(residuals(fit_main)))
-plot(pacf(residuals(fit_main)))
+varcomp <- as.data.frame(VarCorr(fit_chl))
+var_re  <- varcomp$vcov[varcomp$grp == 'Region']
+var_res <- varcomp$vcov[varcomp$grp == 'Residual']
+
+ICC <- var_re / (var_re + var_res)
+
+print(ICC)
 ```
 
 ```{r}
-infl <- performance::check_outliers(fit_main)
+plot(fit_chl)
+```
+
+```{r}
+plot(acf(residuals(fit_chl)))
+plot(pacf(residuals(fit_chl)))
+```
+
+```{r}
+infl <- performance::check_outliers(fit_chl)
 infl
 ```
 
 ```{r}
-mf <- model.frame(fit_main) 
+vif(fit_chl)
+```
+
+```{r}
+mf <- model.frame(fit_chl) 
 row_map <- as.numeric(rownames(mf))
-res <- residuals(fit_main)
+res <- residuals(fit_chl)
 
 df_resrow <- tibble(
   row = row_map,
   resid = res,
-  fitted = fitted(fit_main)
+  fitted = fitted(fit_chl)
 )
 
 df_res <- df_monthly_subset %>%
@@ -674,7 +715,7 @@ df_res <- df_monthly_subset %>%
 ```
 
 ```{r}
-res <- residuals(fit_main)
+res <- residuals(fit_chl)
 
 qqnorm(res)
 qqline(res, col = 'red', lwd = 2)
@@ -727,61 +768,86 @@ plot(fit_amm)
 
 # SEMs
 
-Linear piecewise model (direct comparison to tradtional SEM):
+## Linear Mixed Effects Model
+
+### Piecewise
+
+Now we can fit our models into an SEM. Since they're both LMMs, we have to use piecewiseSEM.
 
 ```{r}
 library(piecewiseSEM)
 
-fit_main <- lm(
-  log_Chlorophyll ~ log_Salinity + 
+fit_chl <- lmer(
+  log_Chlorophyll ~ 
+    log_Salinity + 
     log_DissAmmonia +
     log_DissOrthophos +
     log_Turbidity +
     lag_logChlorophyll +
-    Temperature_c +
-    Temperature2 +
-    Temperature3,
-  data = df_monthly_subset)
-
-fit_amm <- lm(
-  log_DissAmmonia ~ lag_logDissAmmonia +
-    Temperature_c +
-    log_Salinity +
-    log_Turbidity +
-    log_DissOrthophos,
-    data = df_monthly_subset)
-
-psem_out <- psem(fit_main, fit_amm, data = df_monthly_subset)
-summary(psem_out, standardize = 'scale')
-```
-
-LMM piecewise model:
-
-```{r}
-fit_main <- lmer(
-  log_Chlorophyll ~ log_Salinity +
-    log_DissAmmonia +
-    log_DissOrthophos +
-    log_Turbidity +
-    lag_logChlorophyll +
-    Temperature_c +
-    Temperature2 +
-    Temperature3 +
+    Temp1 +
+    Temp2 +
+    Temp3 +
     (1|Region),
   data = df_monthly_subset)
 
 fit_amm <- lmer(
-  log_DissAmmonia ~ lag_logDissAmmonia +
-    Temperature_c +
+  log_DissAmmonia ~ 
+    lag_logDissAmmonia +
+    Temp1 +
     log_Turbidity +
     (1|Region),
   data = df_monthly_subset)
 
-psem_out <- psem(fit_main, fit_amm, data = df_monthly_subset)
+
+psem_out <- psem(fit_chl, fit_amm, data = df_monthly_subset)
 summary(psem_out, standardize = 'scale')
 ```
 
-Linear model (traditional SEM):
+There seems to be a bug, since it says it can't test things that show up in the subsequent dataframes. Nevertheless, we note:
+
+-   AIC: this is only meaningful compared to other models (with the same RE structure)
+    -   (relatively) smaller the better
+-   Chi-Squared: not significant, which means our model fits the observed data well
+-   Fisher's C: significant, there's some missing paths in our causal structure
+    -   we can look at the independence claims (first df) to see which (eg. log_DissAmmonia and log_Salinity)
+-   the second dataframe gives the coefficients (standardized)
+-   the third dataframe gives the $R^2$ values
+    -   marginal are without the random effects while the conditional ones are
+    
+Also note that the coefficients can be interpreted (1 SD change in x corresponds to $\beta$ SD change in y, conditional on other variables) *except* for the three Temperature ones. Together, they define a nonlinear chl–temperature curve, which is not constant (but can be graphed).
+
+## Linear Fixed Effects Model
+
+### Piecewise
+
+For comparison, we can run the same model without the random effect; this makes it comparable to traditional SEM.
+
+```{r}
+fit_chl <- lm(
+  log_Chlorophyll ~ 
+    log_Salinity + 
+    log_DissAmmonia +
+    log_DissOrthophos +
+    log_Turbidity +
+    lag_logChlorophyll +
+    Temp1 +
+    Temp2 +
+    Temp3,
+  data = df_monthly_subset)
+
+fit_amm <- lm(
+  log_DissAmmonia ~ 
+    lag_logDissAmmonia +
+    Temp1 +
+    log_DissOrthophos +
+    log_Turbidity,
+    data = df_monthly_subset)
+
+psem_out <- psem(fit_chl, fit_amm, data = df_monthly_subset)
+summary(psem_out, standardize = 'scale')
+```
+
+### Traditional
 
 ```{r}
 library(lavaan)
@@ -793,22 +859,30 @@ model <- '
     log_DissOrthophos +
     log_Turbidity +
     lag_logChlorophyll +
-    Temperature_c +
-    Temperature2 +
-    Temperature3
+    Temp1 +
+    Temp2 +
+    Temp3
     
     log_DissAmmonia ~ lag_logDissAmmonia +
-    Temperature_c +
+    Temp1 +
     log_DissOrthophos +
     log_Turbidity
-
-    log_DissAmmonia ~~ log_Chlorophyll
 '
 
 fit <- sem(model, data = df_monthly_subset)
 
 summary(fit, fit.measures = TRUE, standardized = TRUE)
+
+modindices(fit, sort = TRUE)
 ```
+
+We note that the coefficients are very similar; the main difference is in interpretation. Here, the high RMSEA, especially, points to missing structural paths (as does the somewhat low TLI). By looking at the modification indices, we see that (similar to the d-separation tests from psem) a log_DissAmmonia ~ log_Salinity link is likely missing.
+
+Note that traditional SEM can also evaluate residual covariance *between response variables*, while psem cannot (the log_Chlorophyll ~~ log_DissAmmonia row in the MI table).
+
+#### Traditional: Plot
+
+We can also plot traditional SEMs, just for fun:
 
 ```{r}
 library(semPlot)
@@ -827,3 +901,144 @@ semPaths(
   mar = c(7, 7, 7, 7)
 )
 ```
+
+## General Additive Model (GAM)
+
+Piecewise SEMs can also handle GAMs, which are another type of linear model. The advantage is how they handle non-linear relationships.
+
+In the previous models, we identified the relationship between Chlorophyll and Temperature as non-linear, so we added polynomial basis functions to our formulas. GAMs essentially do the exact same thing but use splines instead, which are more sophisticated.
+
+(I won't go into model diagnostics for GAMs here.)
+
+#### LMM-like GAM
+
+We can essentially re-create the LMM model by switching out the Temperature terms for a smooth function and keeping the others as linear predictors:
+
+```{r}
+library(mgcv)
+# default basis spline = thin plate
+
+gam_chl <- gam(
+  log_Chlorophyll ~ 
+    log_Salinity +
+    log_DissAmmonia +
+    log_DissOrthophos +
+    log_Turbidity +
+    lag_logChlorophyll +
+    s(Temperature, k = 6) +
+    s(Region, bs = 're'), # random effect (ridge penalty)
+  data = df_monthly_subset,
+  method = 'REML'
+)
+
+gam_amm <- gam(
+  log_DissAmmonia ~ 
+    lag_logDissAmmonia +
+    log_Turbidity +
+    s(Temperature, k = 6) +
+    s(Region, bs = 're'),
+  data = df_monthly_subset,
+  method = 'REML'
+)
+
+psem_gam <- psem(gam_chl, gam_amm, data = df_monthly_subset)
+summary(psem_gam, standardize = 'scale')
+```
+
+Our results are very similar, which makes sense:
+- $R^2$ values are almost the same (though the GAM is slightly better)
+- linear coefficient and p-values are almost the same
+
+However, the big difference is that Temperature is now included as a smooth function instead of multiple polynomial terms. This changes the shape of its partial effect curve:
+
+```{r}
+fit_chl <- lmer(
+  log_Chlorophyll ~ 
+    log_Salinity + 
+    log_DissAmmonia +
+    log_DissOrthophos +
+    log_Turbidity +
+    lag_logChlorophyll +
+    Temp1 +
+    Temp2 +
+    Temp3 +
+    (1|Region),
+  data = df_monthly_subset)
+
+temp_seq <- seq(
+  min(df_monthly_subset$Temperature, na.rm = TRUE),
+  max(df_monthly_subset$Temperature, na.rm = TRUE),
+  length.out = 300
+)
+
+poly_obj <- attr(model.matrix(fit_chl)[,'Temp1'], 'coefs')
+
+new_poly <- poly(temp_seq, degree = 3, coefs = poly_obj)
+
+newdat <- data.frame(
+  log_Salinity        = mean(df_monthly_subset$log_Salinity, na.rm = TRUE),
+  log_DissAmmonia     = mean(df_monthly_subset$log_DissAmmonia, na.rm = TRUE),
+  log_DissOrthophos   = mean(df_monthly_subset$log_DissOrthophos, na.rm = TRUE),
+  log_Turbidity       = mean(df_monthly_subset$log_Turbidity, na.rm = TRUE),
+  lag_logChlorophyll  = mean(df_monthly_subset$lag_logChlorophyll, na.rm = TRUE),
+  Temp1 = new_poly[,1],
+  Temp2 = new_poly[,2],
+  Temp3 = new_poly[,3]
+)
+
+newdat$partial <- predict(fit_chl, newdata = newdat, re.form = NA)
+
+newdat$partial_centered <- newdat$partial - mean(newdat$partial)
+
+ggplot(newdat, aes(x = temp_seq, y = partial_centered)) +
+  geom_line() +
+  labs(
+    x = 'Temperature',
+    y = 'Partial Effect',
+  ) +
+  theme_bw()
+```
+
+```{r}
+plot(gam_chl, select = 1)
+```
+
+We note that the GAM more closely fits our original log_Chlorophyll ~ Temperature plot. We also note that our chi-square goodness of fit test is now significant, meaning this model (with a more correctly modeled Temperature) is a poorer fit, likely due to missing variables.
+
+This all being said, for practical purposes, the LMM gives us a similar overall picture to the GAM; both are valid.
+
+### All Smooths
+
+You could also make all variables smooth terms if you suspect other relationships may be non-linear (though for truly linear relationships it's better not to).
+
+```{r}
+# GAM for log_Chlorophyll
+gam_chl <- gam(
+  log_Chlorophyll ~ 
+    s(log_Salinity, k = 6) +
+    s(log_DissAmmonia, k = 6) +
+    s(log_DissOrthophos, k = 6) +
+    s(log_Turbidity, k = 6) +
+    s(lag_logChlorophyll, k = 6) +
+    s(Temperature, k = 6) + 
+    s(Region, bs = 're'),
+  data = df_monthly_subset,
+  method = 'REML'
+)
+
+# GAM for log_DissAmmonia
+gam_amm <- gam(
+  log_DissAmmonia ~ 
+    s(lag_logDissAmmonia, k = 6) +
+    s(log_Turbidity, k = 6) +
+    s(Temperature, k = 6) +
+    s(Region, bs = 're'),
+  data = df_monthly_subset,
+  method = 'REML'
+)
+
+psem_gam <- psem(gam_chl, gam_amm, data = df_monthly_subset)
+summary(psem_gam, standardize = 'scale')
+```
+
+Our $R^2$ improved, though our interpretations of significance didn't change much, which makes sense. The biggest advantage is that, by examining the individual GAMs, we can visualize/interpret any underlying non-linear relationships in a way that LMMs can't.
