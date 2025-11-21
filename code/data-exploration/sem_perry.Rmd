@@ -117,29 +117,29 @@ plots
 
 Findings:
 
-*No data until 02-2017 (for Suisun Marsh):* DON, DissAmmonia, DissNitrateNitrite, DissOrthophos, TKN, TotPhos
+**No data until 02-2017 (for Suisun Marsh):** DON, DissAmmonia, DissNitrateNitrite, DissOrthophos, TKN, TotPhos
 
 -   rest of missing data is interpolable
 
-*Lots of missing data:* DissNitrate
+**Lots of missing data:** DissNitrate
 
-*Large gaps until 06-2015:* MVI
+**Large gaps until 06-2015:** MVI
 
 -   all 5 month gaps between Jan-May
 
-*Missing after 01-2023 for Suisun Marsh/Suisun Bay:* pH
+**Missing after 01-2023 for Suisun Marsh/Suisun Bay:** pH
 
-*Small interpolable gaps:* Chlorophyll
+**Small interpolable gaps:** Chlorophyll
 
-*No gaps:* Temperature, Salinity, Turbidity, DissolvedOxygen, Inflows
+**No gaps:** Temperature, Salinity, Turbidity, DissolvedOxygen, Inflows
 
 ### Discussion
 
 A few analytes can be used for the entire 01-2010 through 06-2024 time range:
 
--   *Fully ready:* Temperature, Salinity, Turbidity, DissolvedOxygen, Inflows
+-   **Fully ready:** Temperature, Salinity, Turbidity, DissolvedOxygen, Inflows
 
--   *Needs minor interpolation:* Chlorophyll
+-   **Needs minor interpolation:** Chlorophyll
 
 A few could be used for the entire range (with minor interpolation) for all regions except Suisun Marsh. The options are:
 
@@ -625,8 +625,20 @@ plot(fit_chl)
 ```
 
 ```{r}
-plot(acf(residuals(fit_chl)))
-plot(pacf(residuals(fit_chl)))
+res <- residuals(fit_chl)
+
+df_res <- df_train
+df_res$resid <- res
+
+regions <- unique(df_res$Region)
+n <- length(regions)
+
+for (r in regions) {
+  tmp <- df_res$resid[df_res$Region == r]
+  acf(tmp,
+      main = paste(r),
+      na.action = na.pass)
+}
 ```
 
 ```{r}
@@ -641,7 +653,7 @@ qqnorm(res)
 qqline(res, col = 'red', lwd = 2)
 ```
 
-Model diagnostics look pretty good; slight autocorrelation at the ~17th lag indicates minor model misspecification, and there's some right-tail skew, but neither are particularly noteworthy. The lags do show some seasonality but it's not significant.
+Model diagnostics look pretty good; a few minor lag spikes, and there's some right-tail skew, but neither are particularly noteworthy. A few acf graphs do show some seasonality but it's not significant.
 
 ### Full model
 
@@ -685,8 +697,20 @@ plot(fit_chl)
 ```
 
 ```{r}
-plot(acf(residuals(fit_chl)))
-plot(pacf(residuals(fit_chl)))
+res <- residuals(fit_chl)
+
+df_res <- df_monthly_subset
+df_res$resid <- res
+
+regions <- unique(df_res$Region)
+n <- length(regions)
+
+for (r in regions) {
+  tmp <- df_res$resid[df_res$Region == r]
+  acf(tmp,
+      main = paste(r),
+      na.action = na.pass)
+}
 ```
 
 ```{r}
@@ -813,7 +837,7 @@ There seems to be a bug, since it says it can't test things that show up in the 
 -   the second dataframe gives the coefficients (standardized)
 -   the third dataframe gives the $R^2$ values
     -   marginal are without the random effects while the conditional ones are
-    
+
 Also note that the coefficients can be interpreted (1 SD change in x corresponds to $\beta$ SD change in y, conditional on other variables) *except* for the three Temperature ones. Together, they define a nonlinear chl–temperature curve, which is not constant (but can be graphed).
 
 ## Linear Fixed Effects Model
@@ -876,9 +900,9 @@ summary(fit, fit.measures = TRUE, standardized = TRUE)
 modindices(fit, sort = TRUE)
 ```
 
-We note that the coefficients are very similar; the main difference is in interpretation. Here, the high RMSEA, especially, points to missing structural paths (as does the somewhat low TLI). By looking at the modification indices, we see that (similar to the d-separation tests from psem) a log_DissAmmonia ~ log_Salinity link is likely missing.
+We note that the coefficients are very similar; the main difference is in interpretation. Here, the high RMSEA, especially, points to missing structural paths (as does the somewhat low TLI). By looking at the modification indices, we see that (similar to the d-separation tests from psem) a log_DissAmmonia \~ log_Salinity link is likely missing.
 
-Note that traditional SEM can also evaluate residual covariance *between response variables*, while psem cannot (the log_Chlorophyll ~~ log_DissAmmonia row in the MI table).
+Note that traditional SEM can also evaluate residual covariance *between response variables*, while psem cannot (the log_Chlorophyll \~\~ log_DissAmmonia row in the MI table).
 
 #### Traditional: Plot
 
@@ -945,9 +969,7 @@ psem_gam <- psem(gam_chl, gam_amm, data = df_monthly_subset)
 summary(psem_gam, standardize = 'scale')
 ```
 
-Our results are very similar, which makes sense:
-- $R^2$ values are almost the same (though the GAM is slightly better)
-- linear coefficient and p-values are almost the same
+Our results are very similar, which makes sense: - $R^2$ values are almost the same (though the GAM is slightly better) - linear coefficient and p-values are almost the same
 
 However, the big difference is that Temperature is now included as a smooth function instead of multiple polynomial terms. This changes the shape of its partial effect curve:
 
@@ -1003,7 +1025,7 @@ ggplot(newdat, aes(x = temp_seq, y = partial_centered)) +
 plot(gam_chl, select = 1)
 ```
 
-We note that the GAM more closely fits our original log_Chlorophyll ~ Temperature plot. We also note that our chi-square goodness of fit test is now significant, meaning this model (with a more correctly modeled Temperature) is a poorer fit, likely due to missing variables.
+We note that the GAM more closely fits our original log_Chlorophyll \~ Temperature plot. We also note that our chi-square goodness of fit test is now significant, meaning this model (with a more correctly modeled Temperature) is a poorer fit, likely due to missing variables.
 
 This all being said, for practical purposes, the LMM gives us a similar overall picture to the GAM; both are valid.
 
