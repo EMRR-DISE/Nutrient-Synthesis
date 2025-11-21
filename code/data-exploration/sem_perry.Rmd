@@ -62,13 +62,13 @@ df_monthly %>%
 
 There are missing values for certain analytes. To group them:
 
-*balanced*: Temperature, Salinity, Turbidity, DissolvedOxygen, Inflows
+**balanced:** Temperature, Salinity, Turbidity, DissolvedOxygen, Inflows
 
-*relatively balanced (\>= 75%)*: Chlorophyll, pH, MVI
+**relatively balanced (\>= 75%):** Chlorophyll, pH, MVI
 
-*missing data (Suisun Marsh)*: DissAmmonia, DissNitrateNitrite, DissOrthophos, DON, TKN, TotPhos
+**missing data (Suisun Marsh):** DissAmmonia, DissNitrateNitrite, DissOrthophos, DON, TKN, TotPhos
 
-*missing a lot of data*: DissNitrate
+**missing a lot of data:** DissNitrate
 
 We can break this down by month to see if the missing data is interpolable or not:
 
@@ -139,7 +139,7 @@ A few analytes can be used for the entire 01-2010 through 06-2024 time range:
 
 -   **Fully ready:** Temperature, Salinity, Turbidity, DissolvedOxygen, Inflows
 
--   **Needs minor interpolation:** Chlorophyll
+-   **Possibly needs minor interpolation:** Chlorophyll
 
 A few could be used for the entire range (with minor interpolation) for all regions except Suisun Marsh. The options are:
 
@@ -356,7 +356,7 @@ df_monthly_log <- df_monthly_log %>%
 
 ## Correlations
 
-First we examine if any of our data is highly correlated (or not); high correlation between variables is an issue causal inference models.
+First we examine if any of our data is highly correlated (or not); high correlation between variables is an issue for causal inference models.
 
 ```{r}
 corrplot::corrplot(
@@ -455,9 +455,9 @@ ggplot(df_plt_log) +
   facet_wrap(~Analyte, scales = 'free_x')
 ```
 
-From these, I decided to keep log_DissAmmonia, log_Turbidity, Salinity, and Temperature in my model. I also added log_DissOrthophosphate since I think it's usually considered an important variable and the lag term (lag_logChlorophyll) to account for autocorrelation. Note that Temperature appears to have a non-linear, almost cubic relationship with log_Chlorophyll.
+From these, I decided to keep log_DissAmmonia, log_Turbidity, and Temperature in my model. I also added log_DissOrthophosphate since I think it's considered an important variable and the response's lag term (lag_logChlorophyll) to account for autocorrelation. Note that Temperature appears to have a non-linear, almost cubic relationship with log_Chlorophyll.
 
-I'm also adding log_Salinity over Salinity, which is probably wrong, but it's useful for the SEM examples.
+I'm also adding log_Salinity, which is probably wrong, but it's useful for the SEM examples.
 
 ## Bivariate (Categorical)
 
@@ -477,7 +477,7 @@ South Central has the most variance, followed by Suisun Marsh. The other regions
 
 ## Trivariate (Cat./Cont.)
 
-You can also visualize potential interaction effects between categorical and continuous variables (or cat:cat, though cont:cont is much more difficult; it's easier to choose those via model selection). If the relationship between the response and continuous predictor appears to change based on the categorical one, the interaction may be significant.
+You can also visualize potential interaction effects between categorical and continuous variables (or cat:cat, though cont:cont is much more difficult; it's easier to choose those via background knowledge+model selection). If the relationship between the response and continuous predictor appears to change based on the categorical one, the interaction may be significant.
 
 ```{r}
 ggplot(df_plt) +
@@ -509,7 +509,7 @@ Here, no interaction effect particularly stands out. This makes sense, since Reg
 
 Since SEMs are a series of related models (with shared covariance), it's worth checking each sub-model individually. For traditional SEMs, only `lm` (fixed effects) models can be used, though piecewiseSEM can handle other model types. Here, I used linear mixed effects models.
 
-For simplicity, I subset the data from 02-01-2017 to 12-31-2022 to escape issues with unbalanced regional data. I also added three new variables: three basis splines for Temperature. This is so I correctly model Temperature's likely non-linear dependence on Chlorophyll; with three terms, I'm assuming it's cubic.
+For simplicity, I subset the data from 02-01-2017 to 12-31-2022 to escape issues with unbalanced regional data. I also added three new variables: three basis splines for Temperature (essentially $T^1$, $T^2$, and $T^3$). This is so I can correctly model Temperature's likely non-linear dependence on Chlorophyll; with three terms, I'm assuming it's cubic.
 
 I also remove some extreme outliers I found in the model.
 
@@ -974,6 +974,11 @@ Our results are very similar, which makes sense: - $R^2$ values are almost the s
 However, the big difference is that Temperature is now included as a smooth function instead of multiple polynomial terms. This changes the shape of its partial effect curve:
 
 ```{r}
+df_temp_plt <- df_monthly_subset %>%
+  mutate(
+    poly_temp = poly(Temperature, 3)
+  )
+
 fit_chl <- lmer(
   log_Chlorophyll ~ 
     log_Salinity + 
@@ -985,7 +990,10 @@ fit_chl <- lmer(
     Temp2 +
     Temp3 +
     (1|Region),
-  data = df_monthly_subset)
+  data = df_temp_plt
+)
+
+poly_obj <- attr(df_temp_plt$poly_temp, 'coefs')
 
 temp_seq <- seq(
   min(df_monthly_subset$Temperature, na.rm = TRUE),
@@ -993,16 +1001,14 @@ temp_seq <- seq(
   length.out = 300
 )
 
-poly_obj <- attr(model.matrix(fit_chl)[,'Temp1'], 'coefs')
-
 new_poly <- poly(temp_seq, degree = 3, coefs = poly_obj)
 
 newdat <- data.frame(
-  log_Salinity        = mean(df_monthly_subset$log_Salinity, na.rm = TRUE),
-  log_DissAmmonia     = mean(df_monthly_subset$log_DissAmmonia, na.rm = TRUE),
-  log_DissOrthophos   = mean(df_monthly_subset$log_DissOrthophos, na.rm = TRUE),
-  log_Turbidity       = mean(df_monthly_subset$log_Turbidity, na.rm = TRUE),
-  lag_logChlorophyll  = mean(df_monthly_subset$lag_logChlorophyll, na.rm = TRUE),
+  log_Salinity = mean(df_monthly_subset$log_Salinity, na.rm = TRUE),
+  log_DissAmmonia = mean(df_monthly_subset$log_DissAmmonia, na.rm = TRUE),
+  log_DissOrthophos = mean(df_monthly_subset$log_DissOrthophos, na.rm = TRUE),
+  log_Turbidity = mean(df_monthly_subset$log_Turbidity, na.rm = TRUE),
+  lag_logChlorophyll = mean(df_monthly_subset$lag_logChlorophyll, na.rm = TRUE),
   Temp1 = new_poly[,1],
   Temp2 = new_poly[,2],
   Temp3 = new_poly[,3]
