@@ -455,7 +455,7 @@ ggplot(df_plt_log) +
   facet_wrap(~Analyte, scales = 'free_x')
 ```
 
-From these, I decided to keep log_DissAmmonia, log_Turbidity, and Temperature in my model. I also added log_DissOrthophosphate since I think it's considered an important variable and the response's lag term (lag_logChlorophyll) to account for autocorrelation. Note that Temperature appears to have a non-linear, almost cubic relationship with log_Chlorophyll.
+From these, I decided to keep log_DissAmmonia, log_Turbidity, and Temperature in my model. I also added log_DissOrthophosphate (since I think it's considered an important variable) and the response's lag term (lag_logChlorophyll) to account for autocorrelation. Note that Temperature appears to have a non-linear, almost cubic relationship with log_Chlorophyll.
 
 I'm also adding log_Salinity, which is probably wrong, but it's useful for the SEM examples.
 
@@ -537,6 +537,10 @@ df_monthly_subset <- df_monthly_subset %>%
           lag_logChlorophyll, lag_logDissAmmonia, log_pH, log_Temperature)
 ```
 
+### Note: Model Comparisons
+
+Usually you help select an appropriate model via model comparison procedures such as `anova(mod1, mod2)` and looking at statistics such as AIC/BIC/log likelihood and/or doing likelihood ratio tests (as well as using background knowledge). I didn't here, though.
+
 ## LMM - Chla
 
 ### Testing/Training
@@ -573,6 +577,19 @@ fit_chl <- lmer(
   na.action = na.omit
 )
 
+fit2 <- lmer(
+  log_Chlorophyll ~ 
+    log_DissAmmonia +
+    log_Turbidity +
+    lag_logChlorophyll +
+    Temp1 +
+    Temp2 +
+    Temp3 +
+    (1|Region),
+  data = df_train,
+  na.action = na.omit
+)
+
 summary(fit_chl)
 
 # -- predicted model --
@@ -580,7 +597,7 @@ df_test <- df_test %>%
   drop_na(log_Chlorophyll, log_Temperature, log_DissAmmonia, log_Total_Inflow)
 
 df_test <- df_test %>%
-  mutate(pred_log_Chl = predict(fit_chl, newdata = df_test))
+  mutate(pred_log_Chl = predict(fit_chl, new_data = df_test))
 
 # -- plot --
 rng <- range(c(df_test$pred_log_Chl, df_test$log_Chlorophyll), na.rm = TRUE)
@@ -687,7 +704,7 @@ varcomp <- as.data.frame(VarCorr(fit_chl))
 var_re  <- varcomp$vcov[varcomp$grp == 'Region']
 var_res <- varcomp$vcov[varcomp$grp == 'Residual']
 
-ICC <- var_re / (var_re + var_res)
+ICC <- var_re/(var_re + var_res)
 
 print(ICC)
 ```
@@ -913,15 +930,15 @@ library(semPlot)
 
 semPaths(
   fit,
-  what = 'std',      
+  what = 'std',
   whatLabels = 'std',
   layout = 'tree2', 
   nCharNodes = 5,
   edge.label.cex = 1.1,
-  sizeMan = 5,         
+  sizeMan = 5,
   edge.width = 1,
   esize = 1,
-  residuals = FALSE,   
+  residuals = FALSE,
   mar = c(7, 7, 7, 7)
 )
 ```
@@ -1003,7 +1020,7 @@ temp_seq <- seq(
 
 new_poly <- poly(temp_seq, degree = 3, coefs = poly_obj)
 
-newdat <- data.frame(
+new_dat <- data.frame(
   log_Salinity = mean(df_monthly_subset$log_Salinity, na.rm = TRUE),
   log_DissAmmonia = mean(df_monthly_subset$log_DissAmmonia, na.rm = TRUE),
   log_DissOrthophos = mean(df_monthly_subset$log_DissOrthophos, na.rm = TRUE),
@@ -1014,17 +1031,16 @@ newdat <- data.frame(
   Temp3 = new_poly[,3]
 )
 
-newdat$partial <- predict(fit_chl, newdata = newdat, re.form = NA)
+new_dat$partial <- predict(fit_chl, new_data = new_dat, re.form = NA)
 
-newdat$partial_centered <- newdat$partial - mean(newdat$partial)
+new_dat$partial_centered <- new_dat$partial - mean(new_dat$partial)
 
-ggplot(newdat, aes(x = temp_seq, y = partial_centered)) +
+ggplot(new_dat, aes(x = temp_seq, y = partial_centered)) +
   geom_line() +
   labs(
     x = 'Temperature',
     y = 'Partial Effect',
-  ) +
-  theme_bw()
+  )
 ```
 
 ```{r}
@@ -1040,7 +1056,6 @@ This all being said, for practical purposes, the LMM gives us a similar overall 
 You could also make all variables smooth terms if you suspect other relationships may be non-linear (though for truly linear relationships it's better not to).
 
 ```{r}
-# GAM for log_Chlorophyll
 gam_chl <- gam(
   log_Chlorophyll ~ 
     s(log_Salinity, k = 6) +
@@ -1054,7 +1069,6 @@ gam_chl <- gam(
   method = 'REML'
 )
 
-# GAM for log_DissAmmonia
 gam_amm <- gam(
   log_DissAmmonia ~ 
     s(lag_logDissAmmonia, k = 6) +
