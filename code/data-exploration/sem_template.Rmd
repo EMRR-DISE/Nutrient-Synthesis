@@ -192,6 +192,41 @@ ggplot(df_plt, aes(x = Value)) +
 
 They're pretty much all right-skewed to various degrees, except for Temperature (which almost appears bivariate) and pH, which is slightly left skewed. A few graphs, such as chlorophyll and pH, indicate outliers exist.
 
+## Visualize time series
+
+If your data has a time component, it's also useful to look at a time series of the analytes.
+
+```{r}
+# no points
+for (a in unique(df_plt$Analyte)) {
+  p <- df_plt %>%
+    filter(Analyte == a) %>%
+    ggplot(aes(x = Date, y = Value)) +
+    geom_line(color = 'gray50', linewidth = 0.8, na.rm = TRUE) +
+    facet_wrap(~Region, scales = 'free_y', ncol = 2) +
+    labs(title = a) +
+    theme_minimal()
+    
+  print(p)
+}
+```
+
+```{r}
+# with points
+for (a in unique(df_plt$Analyte)) {
+  p <- df_plt %>%
+    filter(Analyte == a) %>%
+    ggplot(aes(x = Date, y = Value)) +
+    geom_line(color = 'gray50', linewidth = 0.8, na.rm = TRUE) +
+    geom_point(shape = 21, na.rm = TRUE) +
+    facet_wrap(~Region, scales = 'free_y', ncol = 2) +
+    labs(title = a) +
+    theme_minimal()
+    
+  print(p)
+}
+```
+
 ## Visualize outliers
 
 Next, I like to note extreme outliers. Even if they're real data, they can negatively influence regressions either by influencing the coefficients or inflating the error.
@@ -297,14 +332,15 @@ for (r in regions) {
       variable %in% vars_imputed
     ) %>%
     ggplot(aes(Date, value)) +
-      geom_line(color = 'gray40', linewidth = 0.5) +
-      geom_point(aes(color = imp), size = 1.5, shape = 21, stroke = 0.8) +
+      geom_line(color = 'gray40', linewidth = 0.5, na.rm = TRUE) +
+      geom_point(aes(color = imp), size = 1.5, shape = 21, stroke = 0.8, na.rm = TRUE) +
       scale_color_manual(
         values = c('FALSE' = 'black', 'TRUE' = 'red'),
         labels = c('Observed', 'Imputed'),
         name = ''
       ) +
-      facet_wrap(~ variable, scales = 'free', ncol = 2)
+    labs(title = r) +
+    facet_wrap(~ variable, scales = 'free', ncol = 2)
 
   print(p)
 }
@@ -533,8 +569,7 @@ df_monthly_subset <- df_monthly_subset %>%
   select(-contains('_poly'))
 
 df_monthly_subset <- df_monthly_subset %>%
-  drop_na(log_Chlorophyll, log_Salinity, log_DissAmmonia, log_DissOrthophos, log_Turbidity,
-          lag_logChlorophyll, lag_logDissAmmonia, log_pH, log_Temperature)
+  drop_na(log_Chlorophyll, log_Salinity, log_DissAmmonia, log_DissOrthophos, log_Turbidity, lag_logChlorophyll, lag_logDissAmmonia, log_pH, log_Temperature)
 ```
 
 ### Note: Model Comparisons
@@ -597,7 +632,7 @@ df_test <- df_test %>%
   drop_na(log_Chlorophyll, log_Temperature, log_DissAmmonia, log_Total_Inflow)
 
 df_test <- df_test %>%
-  mutate(pred_log_Chl = predict(fit_chl, new_data = df_test))
+  mutate(pred_log_Chl = predict(fit_chl, newdata = df_test))
 
 # -- plot --
 rng <- range(c(df_test$pred_log_Chl, df_test$log_Chlorophyll), na.rm = TRUE)
@@ -1034,7 +1069,7 @@ new_dat <- data.frame(
   Temp3 = new_poly[,3]
 )
 
-new_dat$partial <- predict(fit_chl, new_data = new_dat, re.form = NA)
+new_dat$partial <- predict(fit_chl, newdata = new_dat, re.form = NA)
 
 new_dat$partial_centered <- new_dat$partial - mean(new_dat$partial)
 
