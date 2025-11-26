@@ -204,8 +204,7 @@ for (a in unique(df_plt$Analyte)) {
     ggplot(aes(x = Date, y = Value)) +
     geom_line(color = 'gray50', linewidth = 0.8, na.rm = TRUE) +
     facet_wrap(~Region, scales = 'free_y', ncol = 2) +
-    labs(title = a) +
-    theme_minimal()
+    labs(title = a)
     
   print(p)
 }
@@ -220,12 +219,13 @@ for (a in unique(df_plt$Analyte)) {
     geom_line(color = 'gray50', linewidth = 0.8, na.rm = TRUE) +
     geom_point(shape = 21, na.rm = TRUE) +
     facet_wrap(~Region, scales = 'free_y', ncol = 2) +
-    labs(title = a) +
-    theme_minimal()
+    labs(title = a)
     
   print(p)
 }
 ```
+
+These are especially useful for identifying seasonal patterns within the data.
 
 ## Visualize outliers
 
