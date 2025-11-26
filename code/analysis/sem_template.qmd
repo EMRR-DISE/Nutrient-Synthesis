@@ -545,7 +545,7 @@ Here, no interaction effect particularly stands out. This makes sense, since Reg
 
 Since SEMs are a series of related models (with shared covariance), it's worth checking each sub-model individually. For traditional SEMs, only `lm` (fixed effects) models can be used, though piecewiseSEM can handle other model types. Here, I used linear mixed effects models.
 
-For simplicity, I subset the data from 02-01-2017 to 12-31-2022 to escape issues with unbalanced regional data. I also added three new variables: three basis splines for Temperature (essentially $T^1$, $T^2$, and $T^3$). This is so I can correctly model Temperature's likely non-linear dependence on Chlorophyll; with three terms, I'm assuming it's cubic.
+For simplicity, I subset the data from 02-01-2017 to 12-31-2022 to escape issues with unbalanced regional data. I also added three new variables: three basis splines for Temperature (essentially $T^1$, $T^2$, and $T^3$). This is so I can correctly model Temperature's likely non-linear dependence on Chlorophyll; with three terms, I'm assuming it's cubic. This is called *polynomial regression*.
 
 I also remove some extreme outliers I found in the model.
 
@@ -602,19 +602,6 @@ fit_chl <- lmer(
     log_Salinity + 
     log_DissAmmonia +
     log_DissOrthophos +
-    log_Turbidity +
-    lag_logChlorophyll +
-    Temp1 +
-    Temp2 +
-    Temp3 +
-    (1|Region),
-  data = df_train,
-  na.action = na.omit
-)
-
-fit2 <- lmer(
-  log_Chlorophyll ~ 
-    log_DissAmmonia +
     log_Turbidity +
     lag_logChlorophyll +
     Temp1 +
@@ -883,7 +870,7 @@ There seems to be a bug, since it says it can't test things that show up in the 
 
 -   AIC: this is only meaningful compared to other models (with the same RE structure)
     -   (relatively) smaller the better
--   Chi-Squared: not significant, which means our model fits the observed data well
+-   Chi-squared (Goodness of Fit): not significant, which means our model fits the observed data well
 -   Fisher's C: significant, there's some missing paths in our causal structure
     -   we can look at the independence claims (first df) to see which (eg. log_DissAmmonia and log_Salinity)
 -   the second dataframe gives the coefficients (standardized)
@@ -954,6 +941,8 @@ modindices(fit, sort = TRUE)
 We note that the coefficients are very similar; the main difference is in interpretation. Here, the high RMSEA, especially, points to missing structural paths (as does the somewhat low TLI). By looking at the modification indices, we see that (similar to the d-separation tests from psem) a log_DissAmmonia \~ log_Salinity link is likely missing.
 
 Note that traditional SEM can also evaluate residual covariance *between response variables*, while psem cannot (the log_Chlorophyll \~\~ log_DissAmmonia row in the MI table).
+
+Also note that, if we include latent variables, we *must* use traditional SEM. See the `stats examples` SEM file for that code.
 
 #### Traditional: Plot
 
@@ -1087,7 +1076,7 @@ plot(gam_chl, select = 1)
 
 They're similar, but the GAM function is more flexible (it also more closely fits our original log_Chlorophyll \~ Temperature plot; this makes sense if Temperature is an influential predictor). We also note that our chi-square goodness of fit test is now significant, meaning this model (with a more correctly modeled Temperature) is a poorer fit, possibly due to missing variables.
 
-This all being said, for practical purposes, the LMM gives us a similar overall picture to the GAM; both are valid.
+This all being said, for practical purposes, the LMM gives us a similar overall picture to the GAM; both are valid *if you correctly specify the model structure.*
 
 ### All Smooths
 
