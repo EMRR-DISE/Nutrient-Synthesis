@@ -1,4 +1,4 @@
-# DWR Drought Synthesis
+# DWR Nutrient Synthesis
 # Purpose: Process spatial data used in project and save copy in data/spatial for continued use
 # Author: Dave Bosworth
 # Contact: David.Bosworth@water.ca.gov

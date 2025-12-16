@@ -23,6 +23,7 @@ Prepare input data for models used in the DWR nutrient synthesis project.
 ```{r load packages}
 # Load packages
 library(tidyverse)
+library(readxl)
 library(rlang)
 library(glue)
 library(hms)
@@ -142,12 +143,14 @@ df_nutr <- readRDS(here("data/processed/nutrient_data_discrete.rds"))
 
 # Import phytoplankton data from FRP's EDI publication to assign lat-long coordinates to FRP's
 # nutrient data in the DWR integrated discrete nutrient data set
-edi_data_ent <- get_edi_data_entities("edi.269.5")
-edi_data_ent_sub <- str_subset(edi_data_ent, "^phyto")
-get_edi_data("edi.269.5", edi_data_ent_sub)
+edi_id_frp <- "edi.269.5"
+edi_data_ent_frp <- get_edi_data_entities(edi_id_frp)
+edi_data_ent_frp_phyto <- str_subset(edi_data_ent_frp, "^phyto")
+get_edi_data(edi_id_frp, edi_data_ent_frp_phyto)
 temp_files <- list.files(tempdir(), full.names = TRUE)
 
-df_frp_phyto_coord <- read_csv(str_subset(temp_files, edi_data_ent_sub)) %>%
+df_frp_phyto_coord <-
+  read_csv(str_subset(temp_files, edi_data_ent_frp_phyto)) %>%
   drop_na(LatitudeStart, LongitudeStart) %>%
   summarize(
     Latitude = mean(LatitudeStart),
@@ -750,6 +753,182 @@ df_wyt_2010_2024_seas <- df_wyt_2010_2024_mo %>%
 ```
 
 
+# Clam Data
+
+## Import Data
+
+```{r clam import data}
+# Import clam grazing rate data from the drought synthesis EDI package
+edi_id_drt <- "edi.1653.1"
+edi_data_ent_drt <- get_edi_data_entities(edi_id_drt)
+regex_clams <- "_clams|\\s{1}Clam\\s{1}"
+edi_data_ent_drt_clams <- str_subset(edi_data_ent_drt, regex_clams)
+get_edi_data(edi_id_drt, edi_data_ent_drt_clams)
+fp_drt_clams <- dir_ls(tempdir(), regexp = regex_clams)
+
+ls_drt_clams <- fp_drt_clams %>%
+  map(read_csv) %>%
+  set_names(\(x) {
+    str_replace_all(str_extract(basename(x), ".+(?=\\.bin)"), "\\s", "_")
+  })
+
+# Import additional Suisun Marsh clam data from the SMSCG data package on EDI
+edi_id_smscg <- "edi.876.8"
+edi_data_ent_smscg <- get_edi_data_entities(edi_id_smscg)
+edi_data_ent_smscg_clams <- str_subset(edi_data_ent_smscg, "smscg_clams")
+get_edi_data(edi_id_smscg, edi_data_ent_smscg_clams)
+temp_files <- list.files(tempdir(), full.names = TRUE)
+df_smscg_clams <- read_csv(str_subset(temp_files, edi_data_ent_smscg_clams))
+
+# Import additional North Delta clam data collected by USGS
+ndf_usgs_clams <-
+  tibble(
+    fp = dir(here("data/external"), pattern = "BioRecGR", full.names = TRUE),
+    Year = map_int(
+      fp,
+      \(x) as.numeric(str_extract(basename(x), "(?<=Delta)\\d{4}"))
+    ),
+    skip_row_num = if_else(Year == 2015, 0, 1),
+    df_data = map2(fp, skip_row_num, \(x, y) read_excel(path = x, skip = y))
+  )
+```
+
+## Prepare Data
+
+```{r clam prepare data}
+# Clam grazing rate data from the drought synthesis EDI package
+df_drt_clams <- ls_drt_clams %>%
+  map_at(
+    "GRTS_clams",
+    \(x) {
+      rename(x, Station = SiteID) %>%
+        mutate(
+          Date = ymd(paste(Year, Month, "15", sep = "-")),
+          Filtration_Rate = Turnover_Rate * Depth
+        )
+    }
+  ) %>%
+  bind_rows() %>%
+  summarize(
+    Clam_Filtration = sum(Filtration_Rate, na.rm = TRUE),
+    Clam_Turnover = sum(Turnover_Rate, na.rm = TRUE),
+    CorbiculaBiomass = sum(Biomass[which(Clam == "CF")]),
+    PotamocorbulaBiomass = sum(Biomass[which(Clam == "PA")]),
+    .by = c(Station, Date, Latitude, Longitude, Depth)
+  ) %>%
+  mutate(
+    Year = year(Date),
+    Month = month(Date),
+    Longitude = if_else(Longitude > 0, Longitude * -1, Longitude)
+  )
+
+# Suisun Marsh clam data from the SMSCG data package on EDI
+df_smscg_clams_c <- df_smscg_clams %>%
+  mutate(
+    Year,
+    Month = month(Date),
+    Station,
+    Date,
+    Latitude = North_decimal_degrees,
+    Longitude = West_decimal_degrees,
+    CorbiculaBiomass = Corbicula_AFDM_g_per_m2,
+    PotamocorbulaBiomass = Potamocorbula_AFDM_g_per_m2,
+    Clam_Filtration = Total_filtration_rate_m3_per_m2_per_day,
+    Clam_Turnover = Total_grazing_turnover_per_day,
+    .keep = "none"
+  )
+
+# North Delta clam data collected by USGS
+df_usgs_clams <- ndf_usgs_clams %>%
+  select(Year, df_data) %>%
+  deframe() %>%
+  map(\(x) rename_with(x, str_to_title)) %>%
+  map_at(
+    "2015",
+    \(x) {
+      mutate(x, Station = as.character(Station)) %>%
+        rename(Year_data = Year)
+    }
+  ) %>%
+  list_rbind(names_to = "Year_fp") %>%
+  mutate(
+    Year = if_else(!is.na(Year_data), Year_data, as.numeric(Year_fp)),
+    Date = ymd(paste(Year, Month, "15", sep = "-")),
+    Filtration_Rate = Gr,
+    Turnover_Rate = Grto,
+    Latitude = Lat,
+    Longitude = Long
+  ) %>%
+  group_by(Station, Date, Latitude, Longitude)
+
+# Summarize Filtration and Turnover rates separately from the CF and PA biomass
+df_usgs_clams_rates <- df_usgs_clams %>%
+  summarize(
+    Clam_Filtration = sum(Filtration_Rate, na.rm = T),
+    Clam_Turnover = sum(Turnover_Rate),
+    .groups = "drop"
+  )
+
+df_usgs_clams_biomass <- df_usgs_clams %>%
+  filter(Clam %in% c("CF", "PA")) %>%
+  group_by(Clam, .add = TRUE) %>%
+  summarize(Biomass = sum(Biomass), .groups = "drop") %>%
+  pivot_wider(names_from = Clam, values_from = Biomass) %>%
+  rename(CorbiculaBiomass = CF, PotamocorbulaBiomass = PA)
+
+df_usgs_clams_c <-
+  full_join(
+    df_usgs_clams_rates,
+    df_usgs_clams_biomass,
+    by = join_by(Station, Date, Latitude, Longitude)
+  ) %>%
+  mutate(Year = year(Date), Month = month(Date))
+
+# Combine all clams datasets
+df_clams_all <- bind_rows(df_drt_clams, df_smscg_clams_c, df_usgs_clams_c)
+
+# Remove data prior to 2009 and after 2024, add Regions
+df_clams_all_c <- df_clams_all %>%
+  filter(Year %in% 2009:2024) %>%
+  # Assign SubRegions to the stations
+  st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326) %>%
+  st_transform(crs = st_crs(sf_delta)) %>%
+  st_join(sf_delta, join = st_intersects) %>%
+  # Remove any data outside our subregions of interest
+  filter(!is.na(SubRegion)) %>%
+  st_drop_geometry()
+```
+
+## Aggregate Data
+
+```{r clam calc monthly values}
+# Calculate Monthly-Regional averages
+df_clams_avg_mo <- df_clams_all_c %>%
+  summarize(
+    across(
+      c(starts_with("Clam_"), ends_with("Biomass")),
+      \(x) na_if(mean(x, na.rm = TRUE), NaN)
+    ),
+    .by = c(Year, Month, Region)
+  )
+```
+
+```{r clam calc seasonal values}
+# Further calculate Seasonal-Regional averages using Adjusted calendar year: December-November, with
+# December of the previous calendar year included with the following year
+df_clams_avg_seas <- df_clams_avg_mo %>%
+  mutate(YearAdj = if_else(Month == 12, Year + 1, Year)) %>%
+  add_season() %>%
+  summarize(
+    across(
+      c(starts_with("Clam_"), ends_with("Biomass")),
+      \(x) na_if(mean(x, na.rm = TRUE), NaN)
+    ),
+    .by = c(YearAdj, Season, Region)
+  )
+```
+
+
 # Combine All Data
 
 ```{r combine monthly values}
@@ -778,7 +957,8 @@ monthly_values <-
     ls_nutr_avg_wide$df_nutr_avg_mo,
     ls_dwq_avg_wide$df_dwq_avg_mo,
     df_dayflow_tot_mo,
-    df_wyt_2010_2024_mo
+    df_wyt_2010_2024_mo,
+    df_clams_avg_mo
   ) %>%
   reduce(left_join)
 ```
@@ -798,7 +978,8 @@ seasonal_values <-
     ls_nutr_avg_wide$df_nutr_avg_seas,
     ls_dwq_avg_wide$df_dwq_avg_seas,
     df_dayflow_tot_seas,
-    df_wyt_2010_2024_seas
+    df_wyt_2010_2024_seas,
+    df_clams_avg_seas
   ) %>%
   reduce(left_join)
 ```
