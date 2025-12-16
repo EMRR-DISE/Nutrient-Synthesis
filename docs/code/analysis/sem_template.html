@@ -237,8 +237,12 @@ window.Quarto = {
 <h1>Analysis Example</h1>
 <p>This is a quick example of SEM analysis, covering data exploration + model creation + model interpretation.</p>
 <p>My models will be:</p>
-<p><span class="math display">\[\text{log_Chlorophyll} \sim \text{log_DissAmmonia} + \text{...} + \text{RE(Region)}\]</span></p>
-<p><span class="math display">\[\text{log_DissAmmonia} \sim \text{...} + \text{RE(Region)}\]</span></p>
+<p><span class="math display">\[
+\text{log(Chlorophyll)} \sim \text{log(DissAmmonia)} + \text{...} + \text{RE(Region)}
+\]</span></p>
+<p><span class="math display">\[
+\text{log(DissAmmonia)} \sim \text{...} + \text{RE(Region)}
+\]</span></p>
 <p>I used the monthly nutrient data for this.</p>
 <div class="cell">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(tidyverse)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
