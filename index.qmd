@@ -8,3 +8,4 @@ Data Processing:
 
 Model Results:
 
+* [SEM Template](code/analysis/sem_template.qmd)

@@ -1,9 +1,10 @@
 project:
   type: website
   output-dir: docs
-  render: 
+  render:
     - index.qmd
     - code/data_integration/process_data_for_models.qmd
+    - code/analysis/sem_template.qmd
 
 website:
   title: "DWR Nutrient Synthesis"
@@ -19,4 +20,3 @@ format:
     theme: cosmo
     css: styles.css
     toc: true
-

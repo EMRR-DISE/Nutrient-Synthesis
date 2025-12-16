@@ -16,10 +16,19 @@ library(emmeans)
 library(car)
 library(lme4)
 library(lmerTest)
-library(lubridate)
+library(performance)
+library(piecewiseSEM)
+library(lavaan)
+library(semPlot)
+library(mgcv)
+library(here)
+library(conflicted)
 theme_set(theme_bw())
 options(contrasts = c('contr.sum', 'contr.poly'))
-source('code/functions/ns_funcs.R')
+source(here('code/functions/ns_funcs.R'))
+
+# Declare package conflict preferences
+conflicts_prefer(dplyr::filter(), dplyr::lag(), lme4::lmer())
 ```
 
 ```{r}
@@ -41,7 +50,7 @@ When you have categorical variables (like Region), it's best to have balanced da
 How many samples do we have per Region?
 
 ```{r}
-df_monthly %>% 
+df_monthly %>%
   count(Region)
 ```
 
@@ -205,7 +214,7 @@ for (a in unique(df_plt$Analyte)) {
     geom_line(color = 'gray50', linewidth = 0.8, na.rm = TRUE) +
     facet_wrap(~Region, scales = 'free_y', ncol = 2) +
     labs(title = a)
-    
+
   print(p)
 }
 ```
@@ -220,7 +229,7 @@ for (a in unique(df_plt$Analyte)) {
     geom_point(shape = 21, na.rm = TRUE) +
     facet_wrap(~Region, scales = 'free_y', ncol = 2) +
     labs(title = a)
-    
+
   print(p)
 }
 ```
@@ -598,8 +607,8 @@ df_test  <- df_monthly_subset %>% filter(Date %in% test_dates)
 
 # -- training model --
 fit_chl <- lmer(
-  log_Chlorophyll ~ 
-    log_Salinity + 
+  log_Chlorophyll ~
+    log_Salinity +
     log_DissAmmonia +
     log_DissOrthophos +
     log_Turbidity +
@@ -681,7 +690,7 @@ for (r in regions) {
 ```
 
 ```{r}
-infl <- performance::check_outliers(fit_chl)
+infl <- check_outliers(fit_chl)
 infl
 ```
 
@@ -700,8 +709,8 @@ Now we run the full model:
 
 ```{r}
 fit_chl <- lmer(
-  log_Chlorophyll ~ 
-    log_Salinity + 
+  log_Chlorophyll ~
+    log_Salinity +
     log_DissAmmonia +
     log_DissOrthophos +
     log_Turbidity +
@@ -753,7 +762,7 @@ for (r in regions) {
 ```
 
 ```{r}
-infl <- performance::check_outliers(fit_chl)
+infl <- check_outliers(fit_chl)
 infl
 ```
 
@@ -762,7 +771,7 @@ vif(fit_chl)
 ```
 
 ```{r}
-mf <- model.frame(fit_chl) 
+mf <- model.frame(fit_chl)
 row_map <- as.numeric(rownames(mf))
 res <- residuals(fit_chl)
 
@@ -816,7 +825,7 @@ ggplot(df_plt_log) +
 
 ```{r}
 fit_amm <- lmer(
-  log_DissAmmonia ~ 
+  log_DissAmmonia ~
     lag_logDissAmmonia +
     Temp1 +
     log_Turbidity +
@@ -838,11 +847,9 @@ plot(fit_amm)
 Now we can fit our models into an SEM. Since they're both LMMs, we have to use piecewiseSEM.
 
 ```{r}
-library(piecewiseSEM)
-
 fit_chl <- lmer(
-  log_Chlorophyll ~ 
-    log_Salinity + 
+  log_Chlorophyll ~
+    log_Salinity +
     log_DissAmmonia +
     log_DissOrthophos +
     log_Turbidity +
@@ -854,7 +861,7 @@ fit_chl <- lmer(
   data = df_monthly_subset)
 
 fit_amm <- lmer(
-  log_DissAmmonia ~ 
+  log_DissAmmonia ~
     lag_logDissAmmonia +
     Temp1 +
     log_Turbidity +
@@ -887,8 +894,8 @@ For comparison, we can run the same model without the random effect; this makes 
 
 ```{r}
 fit_chl <- lm(
-  log_Chlorophyll ~ 
-    log_Salinity + 
+  log_Chlorophyll ~
+    log_Salinity +
     log_DissAmmonia +
     log_DissOrthophos +
     log_Turbidity +
@@ -899,7 +906,7 @@ fit_chl <- lm(
   data = df_monthly_subset)
 
 fit_amm <- lm(
-  log_DissAmmonia ~ 
+  log_DissAmmonia ~
     lag_logDissAmmonia +
     Temp1 +
     log_DissOrthophos +
@@ -913,10 +920,8 @@ summary(psem_out, standardize = 'scale')
 ### Traditional
 
 ```{r}
-library(lavaan)
-
 model <- '
-    log_Chlorophyll ~ log_Salinity + 
+    log_Chlorophyll ~ log_Salinity +
     log_DissAmmonia +
     log_DissOrthophos +
     log_Turbidity +
@@ -924,7 +929,7 @@ model <- '
     Temp1 +
     Temp2 +
     Temp3
-   
+
     log_DissAmmonia ~ lag_logDissAmmonia +
     Temp1 +
     log_DissOrthophos +
@@ -949,13 +954,11 @@ Also note that, if we include latent variables, we *must* use traditional SEM. S
 We can also plot traditional SEMs, just for fun:
 
 ```{r}
-library(semPlot)
-
 semPaths(
   fit,
   what = 'std',
   whatLabels = 'std',
-  layout = 'tree2', 
+  layout = 'tree2',
   nCharNodes = 5,
   edge.label.cex = 1.1,
   sizeMan = 5,
@@ -979,11 +982,9 @@ In the previous models, we identified the relationship between Chlorophyll and T
 We can essentially re-create the LMM model by switching out the Temperature terms for a smooth function and keeping the others as linear predictors:
 
 ```{r}
-library(mgcv)
 # default basis spline = thin plate
-
 gam_chl <- gam(
-  log_Chlorophyll ~ 
+  log_Chlorophyll ~
     log_Salinity +
     log_DissAmmonia +
     log_DissOrthophos +
@@ -996,7 +997,7 @@ gam_chl <- gam(
 )
 
 gam_amm <- gam(
-  log_DissAmmonia ~ 
+  log_DissAmmonia ~
     lag_logDissAmmonia +
     log_Turbidity +
     s(Temperature, k = 6) +
@@ -1024,8 +1025,8 @@ df_temp_plt <- df_monthly_subset %>%
   )
 
 fit_chl <- lmer(
-  log_Chlorophyll ~ 
-    log_Salinity + 
+  log_Chlorophyll ~
+    log_Salinity +
     log_DissAmmonia +
     log_DissOrthophos +
     log_Turbidity +
@@ -1084,20 +1085,20 @@ You could also make all variables smooth terms if you suspect other relationship
 
 ```{r}
 gam_chl <- gam(
-  log_Chlorophyll ~ 
+  log_Chlorophyll ~
     s(log_Salinity, k = 6) +
     s(log_DissAmmonia, k = 6) +
     s(log_DissOrthophos, k = 6) +
     s(log_Turbidity, k = 6) +
     s(lag_logChlorophyll, k = 6) +
-    s(Temperature, k = 6) + 
+    s(Temperature, k = 6) +
     s(Region, bs = 're'),
   data = df_monthly_subset,
   method = 'REML'
 )
 
 gam_amm <- gam(
-  log_DissAmmonia ~ 
+  log_DissAmmonia ~
     s(lag_logDissAmmonia, k = 6) +
     s(log_Turbidity, k = 6) +
     s(Temperature, k = 6) +
