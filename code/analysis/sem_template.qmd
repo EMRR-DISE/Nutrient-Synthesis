@@ -1,3 +1,19 @@
+---
+title: "SEM Template"
+author: "Perry"
+date: today
+date-format: long
+format:
+  html:
+    toc: true
+    code-fold: show
+    code-tools: true
+    df-print: kable
+execute:
+  message: false
+  warning: false
+---
+
 # Analysis Example
 
 This is a quick example of SEM analysis, covering data exploration + model creation + model interpretation.
@@ -29,18 +45,44 @@ library(here)
 library(conflicted)
 theme_set(theme_bw())
 options(contrasts = c('contr.sum', 'contr.poly'))
-source(here('code/functions/ns_funcs.R'))
 
 # Declare package conflict preferences
 conflicts_prefer(dplyr::filter(), dplyr::lag(), lme4::lmer())
 ```
 
 ```{r}
-fp_monthly <- abs_ns_path('Data/monthly_values.csv')
-df_monthly <- read_csv(fp_monthly) %>%
-  mutate(Region = factor(Region),
-         Date = make_date(Year, Month, 1)) %>%
+# Define WQ parameters included in this example
+wq_param <- c(
+  "DissAmmonia",
+  "DissNitrate",
+  "DissNitrateNitrite",
+  "DissOrthophos",
+  "DON",
+  "TKN",
+  "TotPhos",
+  "Temperature",
+  "Salinity",
+  "Turbidity",
+  "DissolvedOxygen",
+  "Chlorophyll",
+  "pH",
+  "Microcystis",
+  "Sac_Inflow",
+  "SJR_Inflow",
+  "Total_Inflow"
+)
+
+df_monthly <- readRDS(here("data/processed/monthly_values.rds")) %>%
+  mutate(Region = factor(Region), Date = make_date(Year, Month, 1)) %>%
+  select(MonthYear, Year, Month, Date, Region, all_of(wq_param)) %>%
   arrange(Region, Date)
+
+df_monthly_long <- df_monthly %>%
+  pivot_longer(
+    cols = all_of(wq_param),
+    names_to = "Variable",
+    values_to = "Value"
+  )
 ```
 
 # Exploratory Analysis (Data)
@@ -61,16 +103,10 @@ df_monthly %>%
 Basically even, but how many are non-NAs for relevant variables?
 
 ```{r}
-df_monthly %>%
-  group_by(Region) %>%
-  summarize(
-    across(
-      DissAmmonia:Total_Inflow,
-      ~ sum(!is.na(.)),
-      .names = '{col}'
-    ),
-    .groups = 'drop'
-  )
+df_monthly_long %>%
+  drop_na(Value) %>%
+  count(Region, Variable) %>%
+  pivot_wider(names_from = Region, values_from = n, values_fill = 0)
 ```
 
 There are missing values for certain analytes. To group them:
@@ -86,46 +122,44 @@ There are missing values for certain analytes. To group them:
 We can break this down by month to see if the missing data is interpolable or not:
 
 ```{r}
-df_missing <- df_monthly %>%
-  pivot_longer(
-    cols = DissAmmonia:Total_Inflow,
-    names_to = 'Variable',
-    values_to = 'Value'
-  ) %>%
+df_missing <- df_monthly_long %>%
   mutate(
     Missing = factor(
       if_else(is.na(Value), 1, 0),
-      levels = c(0,1),
-      labels = c('Present','Missing')
-    ),
-    Month = floor_date(Date, 'month')
+      levels = c(0, 1),
+      labels = c('Present', 'Missing')
+    )
   )
 
 plots <- df_missing %>%
   group_by(Variable) %>%
   group_split() %>%
   lapply(function(df) {
-    ggplot(df, aes(x = Month, y = Region, fill = Missing)) +
+    ggplot(df, aes(x = Date, y = Region, fill = Missing)) +
       geom_tile(color = 'grey20', linewidth = 0.3, width = 35) +
       scale_fill_manual(
         values = c('Present' = 'lightblue', 'Missing' = 'white')
       ) +
       scale_x_date(
-        date_breaks = '6 months',
-        date_labels = '%m-%Y'
+        name = "Month",
+        date_breaks = '1 year',
+        date_labels = '%Y',
+        expand = expansion(mult = 0)
       ) +
-      theme_minimal() +
+      scale_y_discrete(expand = expansion(add = 0)) +
+      theme_bw() +
       labs(
         title = paste0('Missing Data: ', unique(df$Variable)),
         fill = 'P/A'
       ) +
       theme(
-        axis.text.x = element_text(angle = 90, hjust = 1, size = 6),
+        axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
+        legend.position = "top",
         panel.grid = element_blank()
       )
   })
 
-plots
+walk(plots, print)
 ```
 
 Findings:
