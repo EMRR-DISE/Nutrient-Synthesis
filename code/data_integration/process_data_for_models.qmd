@@ -815,12 +815,21 @@ df_drt_clams <- ls_drt_clams %>%
     }
   ) %>%
   bind_rows() %>%
+  group_by(Station, Date, Latitude, Longitude, Depth) %>%
   summarize(
     Clam_Filtration = sum(Filtration_Rate, na.rm = TRUE),
     Clam_Turnover = sum(Turnover_Rate, na.rm = TRUE),
     CorbiculaBiomass = sum(Biomass[which(Clam == "CF")]),
     PotamocorbulaBiomass = sum(Biomass[which(Clam == "PA")]),
-    .by = c(Station, Date, Latitude, Longitude, Depth)
+    .groups = "drop_last"
+  ) %>%
+  # Average values collected at different depths but at same station and date
+  summarize(
+    across(
+      c(starts_with("Clam_"), ends_with("Biomass")),
+      \(x) na_if(mean(x, na.rm = TRUE), NaN)
+    ),
+    .groups = "drop"
   ) %>%
   mutate(
     Year = year(Date),
