@@ -6,7 +6,6 @@ date-format: long
 format:
   html:
     toc: true
-    toc-expand: 2
     code-fold: show
     code-tools: true
 execute:
@@ -62,8 +61,8 @@ get_edi_data_entities <- function(edi_id) {
   return(df_data_ent$entityName)
 }
 
-# Download specified data entities from an EDI package and save raw bytes files to a temporary
-# directory
+# Download specified data entities from an EDI package and save raw bytes files to a
+# temporary directory
 get_edi_data <- function(edi_id, entity_names) {
   df_data_ent <- read_data_entity_names(edi_id)
   df_data_ent_filt <- df_data_ent %>% filter(entityName %in% entity_names)
@@ -83,7 +82,8 @@ get_edi_data <- function(edi_id, entity_names) {
   }
 }
 
-# Replace values below the reporting limit with simulated values between `min_val` and the RL
+# Replace values below the reporting limit with simulated values between `min_val`
+# and the RL
 replace_blw_rl <- function(df, min_val = 0, seed = 1) {
   # Pull out values that are below the RL
   df_blw_rl <- df %>% filter(Sign == "<")
@@ -141,8 +141,8 @@ mapview(sf_delta, zcol = "Region", alpha.regions = 0.5)
 # Import nutrient data set
 df_nutr <- readRDS(here("data/processed/nutrient_data_discrete.rds"))
 
-# Import phytoplankton data from FRP's EDI publication to assign lat-long coordinates to FRP's
-# nutrient data in the DWR integrated discrete nutrient data set
+# Import phytoplankton data from FRP's EDI publication to assign lat-long coordinates
+# to FRP's nutrient data in the DWR integrated discrete nutrient data set
 edi_id_frp <- "edi.269.5"
 edi_data_ent_frp <- get_edi_data_entities(edi_id_frp)
 edi_data_ent_frp_phyto <- str_subset(edi_data_ent_frp, "^phyto")
@@ -183,8 +183,9 @@ df_nutr_c1 <- df_nutr %>%
 Remove various duplicated records so that there is only one sample per station-day.
 
 ```{r dwr nutr rm dt dups}
-# Clean up duplicated records that share same Date_Time - it might be more appropriate to address
-# this in the nutrient data integration code. TODO: talk to Morgan about this
+# Clean up duplicated records that share same Date_Time - it might be more
+# appropriate to address this in the nutrient data integration code. TODO: talk to
+# Morgan about this
 df_nutr_dt_dups <- df_nutr_c1 %>%
   add_count(Project, Station_Name, Date_Time, Analyte) %>%
   filter(n > 1) %>%
@@ -219,8 +220,8 @@ df_nutr_c3 <- df_nutr_c2 %>%
 ```
 
 ```{r dwr nutr rm dups same day}
-# Filter data so that there is only one sample per station-day by choosing the data point closest
-# to noon
+# Filter data so that there is only one sample per station-day by choosing the data
+# point closest to noon
 df_nutr_daily_dups <- df_nutr_c3 %>%
   add_count(Project, Station_Name, Date, Analyte) %>%
   filter(n > 1) %>%
@@ -233,7 +234,8 @@ df_nutr_daily_dups_fixed <- df_nutr_daily_dups %>%
     Noon_diff = abs(hms(hours = 12) - Time)
   ) %>%
   group_by(Project, Station_Name, Date, Analyte) %>%
-  # Select only 1 data point per Station, Date, and Analyte, choose data closest to noon
+  # Select only 1 data point per Station, Date, and Analyte, choose data closest to
+  # noon
   filter(Noon_diff == min(Noon_diff)) %>%
   # When points are equidistant from noon, select earlier point
   filter(Time == min(Time)) %>%
@@ -259,8 +261,8 @@ df_nutr_c5 <- df_nutr_c4 %>%
     ),
     .keep = "unused"
   ) %>%
-  # Omit <RL values with reporting limits that are greater than the 95th percentile of the values
-  # for the parameter
+  # Omit <RL values with reporting limits that are greater than the 95th percentile
+  # of the values for the parameter
   mutate(q95 = quantile(Result, probs = 0.95), .by = Analyte) %>%
   filter(!(Sign == "<" & Result > q95)) %>%
   select(-q95) %>%
@@ -284,8 +286,9 @@ df_nutr_avg_mo <- df_nutr_c5 %>%
 ```
 
 ```{r dwr nutr calc seasonal values}
-# Further calculate Seasonal-Regional averages using Adjusted calendar year: December-November, with
-# December of the previous calendar year included with the following year
+# Further calculate Seasonal-Regional averages using Adjusted calendar year:
+# December-November, with December of the previous calendar year included with the
+# following year
 df_nutr_avg_seas <- df_nutr_avg_mo %>%
   mutate(YearAdj = if_else(Month == 12, Year + 1, Year)) %>%
   add_season() %>%
@@ -446,8 +449,8 @@ df_dwq_c1 <- df_dwq %>%
   # Remove any data outside our subregions of interest
   filter(!is.na(SubRegion)) %>%
   st_drop_geometry() %>%
-  # Only keep the stations located in Suisun, Montezuma, and Nurse Sloughs from the Suisun Marsh
-  # survey
+  # Only keep the stations located in Suisun, Montezuma, and Nurse Sloughs from the
+  # Suisun Marsh survey
   filter(!(Source == "Suisun" & !str_detect(Station, "^SU|^MZ|^NS")))
 
 # Pivot the parameter columns to long data structure
@@ -510,8 +513,8 @@ df_dwq_c5 <- df_dwq_c4 %>%
 ```
 
 ```{r discretewq rm dups same day}
-# Filter data so that there is only one sample per station-day by choosing the data point closest
-# to noon
+# Filter data so that there is only one sample per station-day by choosing the data
+# point closest to noon
 df_dwq_daily_dups <- df_dwq_c5 %>%
   add_count(Source, Station, Date, Parameter) %>%
   filter(n > 1) %>%
@@ -524,7 +527,8 @@ df_dwq_daily_dups_fixed <- df_dwq_daily_dups %>%
     Noon_diff = abs(hms(hours = 12) - Time)
   ) %>%
   group_by(Source, Station, Date, Parameter) %>%
-  # Select only 1 data point per Station, Date, and Parameter, choose data closest to noon
+  # Select only 1 data point per Station, Date, and Parameter, choose data closest to
+  # noon
   filter(Noon_diff == min(Noon_diff)) %>%
   # When points are equidistant from noon, select earlier point
   filter(Time == min(Time)) %>%
@@ -548,7 +552,8 @@ df_dwq_c7 <- df_dwq_c6 %>%
   filter(!(Parameter == "DissolvedOxygen" & Result > 20)) %>%
   # pH value of 2.56 collected on 7/2/2014 in the Yolo Bypass
   filter(!(Parameter == "pH" & Result < 3)) %>%
-  # Two Turbidity values greater than 1000 collected in early Sept 2017 in the South Delta
+  # Two Turbidity values greater than 1000 collected in early Sept 2017 in the South
+  # Delta
   filter(!(Parameter == "Turbidity" & Result > 1000)) %>%
   # A few Chlorophyll values less than or equal to zero
   filter(!(Parameter == "Chlorophyll" & Result <= 0))
@@ -571,8 +576,9 @@ df_dwq_avg_mo <- df_dwq_c7 %>%
 ```
 
 ```{r discretewq calc seasonal values}
-# Further calculate Seasonal-Regional averages using Adjusted calendar year: December-November, with
-# December of the previous calendar year included with the following year
+# Further calculate Seasonal-Regional averages using Adjusted calendar year:
+# December-November, with December of the previous calendar year included with the
+# following year
 df_dwq_avg_seas <- df_dwq_avg_mo %>%
   mutate(YearAdj = if_else(Month == 12, Year + 1, Year)) %>%
   add_season() %>%
@@ -713,8 +719,8 @@ df_dayflow_tot_mo <- df_dayflow %>%
 ```
 
 ```{r dayflow calc seasonal values}
-# Further calculate seasonal totals using Adjusted calendar year: December-November, with December
-# of the previous calendar year included with the following year
+# Further calculate seasonal totals using Adjusted calendar year: December-November,
+# with December of the previous calendar year included with the following year
 df_dayflow_tot_seas <- df_dayflow_tot_mo %>%
   mutate(YearAdj = if_else(Month == 12, Year + 1, Year)) %>%
   add_season() %>%
@@ -743,9 +749,9 @@ df_wyt_2010_2024_mo <- df_wyt_2010_2024 %>%
 # Prepare seasonal values
 df_wyt_2010_2024_seas <- df_wyt_2010_2024_mo %>%
   add_season() %>%
-  # Use adjusted calendar year for the seasonal assignments
-  # Adjusted calendar year: December-November, with December of the previous calendar year
-  # included with the following year
+  # Use adjusted calendar year for the seasonal assignments Adjusted calendar year:
+  # December-November, with December of the previous calendar year included with the
+  # following year
   filter(!Month %in% 10:12) %>%
   select(-Month) %>%
   rename(YearAdj = Year) %>%
@@ -914,8 +920,9 @@ df_clams_avg_mo <- df_clams_all_c %>%
 ```
 
 ```{r clam calc seasonal values}
-# Further calculate Seasonal-Regional averages using Adjusted calendar year: December-November, with
-# December of the previous calendar year included with the following year
+# Further calculate Seasonal-Regional averages using Adjusted calendar year:
+# December-November, with December of the previous calendar year included with the
+# following year
 df_clams_avg_seas <- df_clams_avg_mo %>%
   mutate(YearAdj = if_else(Month == 12, Year + 1, Year)) %>%
   add_season() %>%
@@ -929,13 +936,111 @@ df_clams_avg_seas <- df_clams_avg_mo %>%
 ```
 
 
+# Vegetation Index Data
+
+## Import Data
+
+```{r veg index import data}
+# Vegetation Index data
+df_veg_index <- read_csv(here("data/raw/wqes_veg.csv"))
+
+# Station Info
+df_veg_index_stations <- read_csv(here("data/raw/wqes_veg_stations.csv"))
+```
+
+## Prepare Data
+
+```{r veg index prepare data}
+df_veg_index_c <- df_veg_index %>%
+  mutate(
+    StationCode,
+    Date = date(FldDate),
+    Month = month(Date),
+    Year = year(Date),
+    VegIndex_Subm = FldObsVegSub,
+    VegIndex_Surf = FldObsVegSurf,
+    .keep = "none"
+  ) %>%
+  # Remove records were all values are missing, remove data collected after 2024
+  filter(
+    !if_all(starts_with("VegIndex"), is.na),
+    Year <= 2024
+  ) %>%
+  # Convert index levels to numeric values
+  mutate(
+    across(
+      starts_with("VegIndex"),
+      \(x) {
+        case_match(
+          x,
+          "Not Visible" ~ 0,
+          "Low" ~ 1,
+          c("medium", "Medium") ~ 2,
+          "High" ~ 3,
+          "Extreme" ~ 4
+        )
+      }
+    )
+  ) %>%
+  # Assign SubRegions to the stations
+  left_join(
+    df_veg_index_stations %>%
+      distinct(
+        StationCode,
+        Latitude = `Latitude (WGS84)`,
+        Longitude = `Longitude (WGS84)`
+      ),
+    by = join_by(StationCode)
+  ) %>%
+  st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326) %>%
+  st_transform(crs = st_crs(sf_delta)) %>%
+  st_join(sf_delta, join = st_intersects) %>%
+  # Remove any data outside our subregions of interest
+  filter(!is.na(SubRegion)) %>%
+  st_drop_geometry() %>%
+  # Remove a few duplicated records
+  distinct()
+```
+
+## Aggregate Data
+
+```{r veg index calc monthly values}
+# Calculate Monthly-Regional averages
+df_veg_index_avg_mo <- df_veg_index_c %>%
+  summarize(
+    across(
+      starts_with("VegIndex"),
+      \(x) na_if(mean(x, na.rm = TRUE), NaN)
+    ),
+    .by = c(Year, Month, Region)
+  )
+```
+
+```{r veg index calc seasonal values}
+# Further calculate Seasonal-Regional averages using Adjusted calendar year:
+# December-November, with December of the previous calendar year included with the
+# following year
+df_veg_index_avg_seas <- df_veg_index_avg_mo %>%
+  mutate(YearAdj = if_else(Month == 12, Year + 1, Year)) %>%
+  add_season() %>%
+  summarize(
+    across(
+      starts_with("VegIndex"),
+      \(x) na_if(mean(x, na.rm = TRUE), NaN)
+    ),
+    .by = c(YearAdj, Season, Region)
+  )
+```
+
+
 # Combine All Data
 
 ```{r combine monthly values}
 # Import region assignments
 df_regions <- read_csv(here("data/raw/region_assignments.csv"))
 
-# Create data frame that contains all possible combinations of year, month, and region
+# Create data frame that contains all possible combinations of year, month, and
+# region
 df_yr_mo_reg <-
   expand_grid(
     Year = 2010:2024,
@@ -950,7 +1055,8 @@ df_yr_mo_reg <-
     .before = Year
   )
 
-# Combine all Monthly-Regional averages, monthly totals, or annual values into one data frame
+# Combine all Monthly-Regional averages, monthly totals, or annual values into one
+# data frame
 monthly_values <-
   list(
     df_yr_mo_reg,
@@ -958,20 +1064,23 @@ monthly_values <-
     ls_dwq_avg_wide$df_dwq_avg_mo,
     df_dayflow_tot_mo,
     df_wyt_2010_2024_mo,
-    df_clams_avg_mo
+    df_clams_avg_mo,
+    df_veg_index_avg_mo
   ) %>%
   reduce(left_join)
 ```
 
 ```{r combine seasonal values}
-# Create data frame that contains all possible combinations of year, season, and region
+# Create data frame that contains all possible combinations of year, season, and
+# region
 df_yr_seas_reg <- df_yr_mo_reg %>%
   add_season() %>%
   distinct(YearAdj = Year, Season, Region) %>%
   # Remove Summer 2024 because of low sampling
   filter(!(YearAdj == 2024 & Season == "Summer"))
 
-# Combine all Seasonal-Regional averages, seasonal totals, or annual values into one data frame
+# Combine all Seasonal-Regional averages, seasonal totals, or annual values into one
+# data frame
 seasonal_values <-
   list(
     df_yr_seas_reg,
@@ -979,7 +1088,8 @@ seasonal_values <-
     ls_dwq_avg_wide$df_dwq_avg_seas,
     df_dayflow_tot_seas,
     df_wyt_2010_2024_seas,
-    df_clams_avg_seas
+    df_clams_avg_seas,
+    df_veg_index_avg_seas
   ) %>%
   reduce(left_join)
 ```
