@@ -1042,6 +1042,70 @@ df_veg_index_avg_seas <- df_veg_index_avg_mo %>%
 ```
 
 
+# Wind Data
+
+## Import Data
+
+```{r wind import data}
+# Monthly values for each region is in a separate csv file
+# Define file paths
+fp_wind_mo <- dir(
+  here("data/raw"),
+  pattern = "Wind_[[:alpha:]]{4}_monthly.+\\.csv$",
+  full.names = TRUE
+)
+
+# Import each csv file into a nested dataframe
+ndf_wind_mo <- tibble(
+  fp = fp_wind_mo,
+  Region = str_extract(fp, "(?<=Wind_)[:alpha:]{4}(?=_monthly)"),
+  df_data = map(fp, read_csv)
+)
+```
+
+## Prepare Data
+
+```{r wind prepare data}
+df_wind_mo <- ndf_wind_mo %>%
+  mutate(
+    Region = case_match(
+      Region,
+      "Conf" ~ "Confluence",
+      "Nort" ~ "North",
+      "SBay" ~ "Suisun Bay",
+      "SCen" ~ "SouthCentral",
+      "SMar" ~ "Suisun Marsh"
+    ),
+    df_data = map(
+      df_data,
+      \(x) {
+        rename_with(
+          x,
+          \(y) str_extract(y, "(?<=[:alpha:]{4}-)[:alpha:]+$"),
+          ends_with(c("mean", "max"))
+        )
+      }
+    ),
+    .keep = "none"
+  ) %>%
+  unnest(df_data) %>%
+  select(
+    Region,
+    date,
+    max = Wmax,
+    ends_with(c("AvLt3.0", "AvLt4.5"))
+  ) %>%
+  rename_with(\(x) paste0("Wind_", x), where(is.numeric)) %>%
+  mutate(
+    Year = year(date),
+    Month = month(date),
+    .keep = "unused"
+  )
+```
+
+We'll only include monthly values for the wind variables for now.
+
+
 # Combine All Data
 
 ```{r combine monthly values}
@@ -1074,7 +1138,8 @@ monthly_values <-
     df_dayflow_tot_mo,
     df_wyt_2010_2024_mo,
     df_clams_avg_mo,
-    df_veg_index_avg_mo
+    df_veg_index_avg_mo,
+    df_wind_mo
   ) %>%
   reduce(left_join)
 ```

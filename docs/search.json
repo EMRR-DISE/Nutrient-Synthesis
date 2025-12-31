@@ -257,5 +257,19 @@
     "title": "Process Input Data for Models",
     "section": "Aggregate Data",
     "text": "Aggregate Data\n\n\nCode\n# Calculate Monthly-Regional averages\ndf_veg_index_avg_mo &lt;- df_veg_index_c %&gt;%\n  summarize(\n    across(\n      starts_with(\"VegIndex\"),\n      \\(x) na_if(mean(x, na.rm = TRUE), NaN)\n    ),\n    .by = c(Year, Month, Region)\n  )\n\n\n\n\nCode\n# Further calculate Seasonal-Regional averages using Adjusted calendar year:\n# December-November, with December of the previous calendar year included with the\n# following year\ndf_veg_index_avg_seas &lt;- df_veg_index_avg_mo %&gt;%\n  mutate(YearAdj = if_else(Month == 12, Year + 1, Year)) %&gt;%\n  add_season() %&gt;%\n  summarize(\n    across(\n      starts_with(\"VegIndex\"),\n      \\(x) na_if(mean(x, na.rm = TRUE), NaN)\n    ),\n    .by = c(YearAdj, Season, Region)\n  )"
+  },
+  {
+    "objectID": "code/data_integration/process_data_for_models.html#import-data-6",
+    "href": "code/data_integration/process_data_for_models.html#import-data-6",
+    "title": "Process Input Data for Models",
+    "section": "Import Data",
+    "text": "Import Data\n\n\nCode\n# Monthly values for each region is in a separate csv file\n# Define file paths\nfp_wind_mo &lt;- dir(\n  here(\"data/raw\"),\n  pattern = \"Wind_[[:alpha:]]{4}_monthly.+\\\\.csv$\",\n  full.names = TRUE\n)\n\n# Import each csv file into a nested dataframe\nndf_wind_mo &lt;- tibble(\n  fp = fp_wind_mo,\n  Region = str_extract(fp, \"(?&lt;=Wind_)[:alpha:]{4}(?=_monthly)\"),\n  df_data = map(fp, read_csv)\n)"
+  },
+  {
+    "objectID": "code/data_integration/process_data_for_models.html#prepare-data-6",
+    "href": "code/data_integration/process_data_for_models.html#prepare-data-6",
+    "title": "Process Input Data for Models",
+    "section": "Prepare Data",
+    "text": "Prepare Data\n\n\nCode\ndf_wind_mo &lt;- ndf_wind_mo %&gt;%\n  mutate(\n    Region = case_match(\n      Region,\n      \"Conf\" ~ \"Confluence\",\n      \"Nort\" ~ \"North\",\n      \"SBay\" ~ \"Suisun Bay\",\n      \"SCen\" ~ \"SouthCentral\",\n      \"SMar\" ~ \"Suisun Marsh\"\n    ),\n    df_data = map(\n      df_data,\n      \\(x) {\n        rename_with(\n          x,\n          \\(y) str_extract(y, \"(?&lt;=[:alpha:]{4}-)[:alpha:]+$\"),\n          ends_with(c(\"mean\", \"max\"))\n        )\n      }\n    ),\n    .keep = \"none\"\n  ) %&gt;%\n  unnest(df_data) %&gt;%\n  select(\n    Region,\n    date,\n    max = Wmax,\n    ends_with(c(\"AvLt3.0\", \"AvLt4.5\"))\n  ) %&gt;%\n  rename_with(\\(x) paste0(\"Wind_\", x), where(is.numeric)) %&gt;%\n  mutate(\n    Year = year(date),\n    Month = month(date),\n    .keep = \"unused\"\n  )\n\n\nWe’ll only include monthly values for the wind variables for now."
   }
 ]
