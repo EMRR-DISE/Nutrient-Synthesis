@@ -9,9 +9,9 @@ library(deltamapr)
 library(readxl)
 
 #Previous grazing rate data from the drought synthesis package
-EMPclams = read_csv("https://pasta.lternet.edu/package/data/eml/edi/1653/1/407336fbf9a2005780935acc5f223e34") 
-GRTSclams = read_csv("https://pasta.lternet.edu/package/data/eml/edi/1653/1/8a1292d209f5ed2a7f1de1f140b0b837") 
-clamregressions = read_csv("https://pasta.lternet.edu/package/data/eml/edi/1653/1/0f11bd41ec1b41be92e502a9fa47209e") 
+EMPclams = read_csv("https://pasta.lternet.edu/package/data/eml/edi/1653/1/407336fbf9a2005780935acc5f223e34")
+GRTSclams = read_csv("https://pasta.lternet.edu/package/data/eml/edi/1653/1/8a1292d209f5ed2a7f1de1f140b0b837")
+clamregressions = read_csv("https://pasta.lternet.edu/package/data/eml/edi/1653/1/0f11bd41ec1b41be92e502a9fa47209e")
 
 #get additional Suisun Marsh data from the SMSCG data package on EDI
 #rename and standardize format
@@ -43,7 +43,7 @@ USGSclams = bind_rows(t3, t5, t7, t9) %>%
   rename(Filtration_Rate = GR, Turnover_Rate = GRTO, Latitude = Lat, Longitude = Long)%>%
   mutate(Date = ymd(paste(Year, Month, "15", sep = "-"))) %>%
   group_by(Station, Date, Latitude, Longitude) %>%
-  summarize(Filtration = sum(Filtration_Rate, na.rm =T), Turnover = sum(Turnover_Rate), 
+  summarize(Filtration = sum(Filtration_Rate, na.rm =T), Turnover = sum(Turnover_Rate),
             CorbiculaBiomass = Biomass[which(Clam == "CF")], PotamocorbulaBiomass = Biomass[which(Clam == "PA")])
 #I think GR is the same as filtration rate, basically. We only have turnover rate for 2015 for some odd reason
 
@@ -108,7 +108,6 @@ ggplot()+
   theme_bw()
 
 #regional, monthly data for nutrient model
-
 Ave_filt_regions = TotalFilt_regions %>%
   group_by(Month, Year, Region) %>%
   summarize(Clam_Turnover = mean(Turnover, na.rm =T),
@@ -117,22 +116,13 @@ Ave_filt_regions = TotalFilt_regions %>%
             PotamocorbulaBiomass = mean(PotamocorbulaBiomass, na.rm =T)) %>%
   filter(!is.na(Region))
 
-#load monthly data and merge
-
-integrated_monthly = read_rds("data/processed/monthly_values.rds")
-integrated_wclams = left_join(integrated_monthly, Ave_filt_regions)
-saveRDS(integrated_wclams, file = "data/processed/monthly_values.rds")
-write.csv(integrated_wclams,"data/processed/monthly_values.csv", row.names = F)
-
-#now the seasonal version 
-seasonal_values <- readRDS("data/processed/seasonal_values.rds")
-
+#now the seasonal version
 SeasonalAve_filt_regions = TotalFilt_regions %>%
   mutate(YearAdj = case_when(Month ==12 ~ Year+1,
                            TRUE ~ Year),
          Season = case_when(Month %in% c(1,2, 12) ~ "Winter",
                             Month %in% c(3,4,5) ~ "Spring",
-                            Month %in% c(6,7,8) ~ "Summer", 
+                            Month %in% c(6,7,8) ~ "Summer",
                             Month %in% c(9,10,11) ~ "Fall") ) %>%
   group_by(Season, YearAdj, Region) %>%
   summarize(Clam_Turnover = mean(Turnover, na.rm =T),
@@ -140,9 +130,3 @@ SeasonalAve_filt_regions = TotalFilt_regions %>%
             CorbiculaBiomass = mean(CorbiculaBiomass, na.rm =T),
             PotamocorbulaBiomass = mean(PotamocorbulaBiomass, na.rm =T)) %>%
   filter(!is.na(Region))
-
-seasonal_values_wclams = seasonal_values %>%
-  left_join(SeasonalAve_filt_regions)
-
-saveRDS(seasonal_values_wclams , file = "data/processed/seasonal_values.rds")
-write.csv(seasonal_values_wclams ,"data/processed/seasonal_values.csv", row.names = F)
