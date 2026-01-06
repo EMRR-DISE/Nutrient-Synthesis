@@ -668,6 +668,92 @@ df_dwq_avg_seas %>%
   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
 ```
 
+# PESP
+```{r pesp import data}
+df_pesp <- readRDS(here("data/external/pesp_2013_2024.rds"))
+
+
+# assign subregions
+df_pesp <- df_pesp %>%
+  filter(!is.na(Latitude) | !is.na(Longitude)) %>%
+  st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326) %>%
+  st_transform(crs = st_crs(sf_delta)) %>%
+  st_join(sf_delta, join = st_intersects) %>%
+  # remove any data outside our subregions of interest
+  filter(!is.na(SubRegion)) %>%
+  st_drop_geometry()
+```
+
+```{r}
+# only HAB genus' for now
+
+# target genera
+target_genera <- c(
+  'Microcystis',
+  'Aphanizominon',
+  'Dolichospermum',
+  'Pseudoanabaena',
+  'Planktothrix',
+  'Sphaerospermopsis',
+  'Aphanizomenon'
+)
+
+# stations sampled
+station_months <- df_pesp %>%
+  mutate(
+    Year = year(Date),
+    Month = month(Date)
+  ) %>%
+  distinct(Year, Month, Region, Station)
+
+# HAB biovol (all target genera)
+hab_station_month <- df_pesp %>%
+  filter(Genus %in% target_genera) %>%
+  mutate(
+    Year = year(Date),
+    Month = month(Date)
+  ) %>%
+  summarize(
+    hab_biovol_station = sum(Biovolume_per_mL, na.rm = TRUE),
+    .by = c(Year, Month, Region, Station)
+  )
+
+# microcystis only biovol
+mc_station_month <- df_pesp %>%
+  filter(Genus == 'Microcystis') %>%
+  mutate(
+    Year = year(Date),
+    Month = month(Date)
+  ) %>%
+  summarize(
+    mc_biovol_station = sum(Biovolume_per_mL, na.rm = TRUE),
+    .by = c(Year, Month, Region, Station)
+  )
+# fill in zeros and aggregate
+df_filledhab <- station_months %>%
+  left_join(
+    hab_station_month,
+    by = c('Year', 'Month', 'Region', 'Station')
+  ) %>%
+  left_join(
+    mc_station_month,
+    by = c('Year', 'Month', 'Region', 'Station')
+  ) %>%
+  mutate(
+    hab_biovol_station = replace_na(hab_biovol_station, 0),
+    mc_biovol_station = replace_na(mc_biovol_station, 0)
+  ) %>%
+  summarize(
+    hab_sum = sum(hab_biovol_station, na.rm = TRUE),
+    mc_sum = sum(mc_biovol_station, na.rm = TRUE),
+    num_stations = n_distinct(Station),
+    AllBiovol_per_mL = hab_sum / num_stations,
+    MCBiovol_per_mL = mc_sum / num_stations,
+    .by = c(Year, Month, Region)
+  ) %>%
+  select(Year, Month, Region, AllBiovol_per_mL, MCBiovol_per_mL)
+```
+
 
 # DAYFLOW
 
@@ -787,3 +873,24 @@ ls_final_data %>%
 ls_final_data %>%
   iwalk(\(x, idx) saveRDS(x, file = paste0(fp_processed, "/", idx, ".rds")))
 ```
+
+# FIX: add in PESP real quick
+
+```{r}
+df_regional <- readRDS(here("data/processed/monthly_values.rds"))
+
+df_filledhab <- df_filledhab %>%
+  filter(!(Year == 2024 & Month > 6)) %>%
+  # Create Month-Year column
+  mutate(
+    MonthYear = paste(month(Month, label = TRUE), Year, sep = "-"),
+    .before = Year
+  )
+
+df_final <- df_regional %>%
+  left_join(df_filledhab, by = c('MonthYear', 'Year', 'Month', 'Region')) %>%
+  rename(MVI = Microcystis)
+
+saveRDS(df_final, 'data/processed/monthly_values_withpesp.rds')
+```
+

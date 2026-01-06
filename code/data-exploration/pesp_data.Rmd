@@ -1,0 +1,170 @@
+```{r}
+library(tidyverse)
+
+df_monthly <- readRDS('data/processed/monthly_values_withpesp.rds') %>%
+    mutate(Region = factor(Region),
+         Date = make_date(Year, Month, 1)) %>%
+  arrange(Region, Date)
+```
+
+```{r}
+df_mvi_pct <- df_monthly %>%
+  filter(!is.na(MVI)) %>%
+  count(MVI, name = 'n') %>%
+  mutate(
+    n_total = sum(n),
+    pct = round(100 * n/n_total, 2)
+  ) %>%
+  arrange(MVI)
+
+df_mvi_pct
+```
+
+```{r}
+df_mvi_region <- df_monthly %>%
+  filter(!is.na(MVI)) %>%
+  group_by(Region) %>%
+  summarise(
+    n_total = n(),
+    n_mvi = sum(MVI > 1),
+    pct_mvi = round(100 * n_mvi/n_total, 2),
+    .groups = 'drop'
+  ) %>%
+  arrange(desc(n_mvi))
+
+df_mvi_region
+```
+
+```{r}
+df_mvi_region <- df_monthly %>%
+  filter(!is.na(MVI)) %>%
+  group_by(Region) %>%
+  summarise(
+    n_total = n(),
+    n_mvi = sum(MVI),
+    pct_mvi = round(100*n_mvi/n_total, 2),
+    .groups = 'drop'
+  ) %>%
+  arrange(desc(n_mvi))
+
+df_mvi_region
+```
+
+```{r}
+df_missed <- df_monthly %>%
+  filter(!is.na(MVI)) %>%
+  mutate(
+    MC_status = case_when(
+      is.na(MCBiovol_per_mL) ~ 'MC not collected',
+      MCBiovol_per_mL > 0 ~ 'MC detected',
+      MCBiovol_per_mL == 0 ~ 'MC not detected',
+      TRUE ~ NA_character_
+    ),
+    All_status = case_when(
+      is.na(AllBiovol_per_mL) ~ 'All not collected',
+      AllBiovol_per_mL > 0 ~ 'All detected',
+      AllBiovol_per_mL == 0 ~ 'All not detected',
+      TRUE ~ NA_character_
+    ),
+    Other_status = if_else(
+      !is.na(AllBiovol_per_mL) & !is.na(MCBiovol_per_mL) &
+        AllBiovol_per_mL > 0 & MCBiovol_per_mL == 0,
+      'Other detected',
+      NA_character_
+    )
+  ) %>%
+  group_by(MVI) %>%
+  summarise(
+    n_total = n(),
+
+    `MC detected` = round(100*mean(MC_status == 'MC detected'), 2),
+    `MC not detected` = round(100*mean(MC_status == 'MC not detected'), 2),
+    `MC not collected` = round(100*mean(MC_status == 'MC not collected'), 2),
+
+    `All detected` = round(100*mean(All_status == 'All detected'), 2),
+    `All not detected` = round(100*mean(All_status == 'All not detected'), 2),
+    `All not collected` = round(100*mean(All_status == 'All not collected'), 2),
+
+    `Other detected` = round(100*mean(!is.na(Other_status)), 2),
+
+    .groups = 'drop'
+  ) %>%
+  arrange(MVI)
+
+df_all_missed <- df_missed %>%
+  select(
+    MVI, n_total,
+    starts_with('All ')
+  )
+
+df_MC_missed <- df_missed %>%
+  select(
+    MVI, n_total,
+    starts_with('MC ')
+  )
+
+df_other_missed <- df_missed %>%
+  select(
+    MVI, n_total,
+    starts_with('Other ')
+  )
+
+df_MC_missed
+```
+
+```{r}
+df_all_missed
+```
+
+```{r}
+df_other_missed
+```
+
+```{r}
+df_peggy <- read_csv(here::here('data/raw/peggys_mcdata.csv'))
+```
+
+```{r}
+df_mc_cross <- df_peggy %>%
+  summarise(
+    total = n(),
+    peggy_detect = sum(MC_Peggy > 0, na.rm = TRUE),
+    EMP_detect = sum(MC_EMP > 0, na.rm = TRUE),
+    peggy_detect_EMP_not = sum(
+      MC_Peggy > 0 & (is.na(MC_EMP) | MC_EMP == 0),
+      na.rm = TRUE
+    )
+  )
+
+df_mc_cross
+```
+
+```{r}
+df_dif <- df_peggy %>%
+  filter(
+    MC_Peggy > 0,
+    MC_EMP > 0
+  ) %>%
+  mutate(
+    diff = MC_Peggy - MC_EMP,
+    avg = (MC_Peggy + MC_EMP)/2
+  ) %>%
+  filter(diff < 5e7)
+
+ggplot(df_dif) +
+  # geom_point(aes(x = avg, y = diff)) +
+  geom_point(aes(x = avg, y = MC_EMP), shape = 21, color = 'black', fill = 'red', size = 3, alpha = 0.5) +
+  geom_point(aes(x = avg, y = MC_Peggy), shape = 21, color = 'black', fill = 'blue', size = 3, alpha = 0.5)
+```
+
+```{r}
+ggplot(df_dif) +
+  geom_point(aes(x = avg, y = MC_Peggy), shape = 21, color = 'black', fill = 'blue', size = 3, alpha = 0.5)
+```
+
+```{r}
+ggplot(df_dif) +
+  geom_point(aes(x = avg, y = MC_EMP), shape = 21, color = 'black', fill = 'red', size = 3, alpha = 0.5)
+```
+
+

@@ -1,0 +1,123 @@
+Add discrete FRP lat/lons to discrete dataset.
+
+```{r}
+library(tidyverse)
+library(lubridate)
+df_frp <- nutrient_data_discrete %>%
+  filter(Project == 'Fish Restoration Program')
+
+df_locs <- nutrients_FRP2024 %>%
+  mutate(
+    Date_Time = mdy_hms(paste(Date, StartTime)),
+    Date_Time = force_tz(Date_Time, tzone = 'Etc/GMT+8'),
+    Date = mdy(Date),
+    Project = 'Fish Restoration Program'
+    ) %>%
+  distinct(Project, SampleID_frp, Location, Date, Date_Time, LatitudeStart, LongitudeStart) %>%
+  rename(Latitude = LatitudeStart,
+         Longitude = LongitudeStart,
+         Sample_Code = SampleID_frp,
+         Station_Name = Location)
+```
+
+```{r}
+df_comb <- df_frp %>%
+  left_join(df_locs, by = c('Sample_Code', 'Station_Name'))
+
+locs_only <- df_locs %>%
+  anti_join(df_frp, by = c('Sample_Code', 'Station_Name')) %>%
+  distinct(Sample_Code, Station_Name, Date_Time)
+
+frp_only <- df_frp %>%
+  anti_join(df_locs, by = c('Sample_Code', 'Station_Name')) %>%
+  distinct(Sample_Code, Station_Name, Date_Time)
+
+write_csv(frp_only, 'C:/Users/sperry/Desktop/frp_no_latlons.csv')
+```
+
+```{r}
+mismatched_time <- df_frp %>%
+  inner_join(
+    df_locs,
+    by = c('Sample_Code', 'Station_Name'),
+    suffix = c('_frp', '_loc')
+  ) %>%
+  filter(
+    !(is.na(Date_Time_frp) & is.na(Date_Time_loc)),
+    Date_Time_frp != Date_Time_loc
+  ) %>%
+  select(Sample_Code, Station_Name, Date_Time_frp, Date_Time_loc) %>%
+  distinct()
+
+mismatched_time
+```
+
+```{r}
+mismatched_date <- df_frp %>%
+  inner_join(
+    df_locs,
+    by = c('Sample_Code', 'Station_Name'),
+    suffix = c('_frp', '_loc')
+  ) %>%
+  filter(
+    !(is.na(Date_frp) & is.na(Date_loc)),
+    Date_frp != Date_loc
+  ) %>%
+  select(Sample_Code, Station_Name, Date_frp, Date_loc) %>%
+  distinct()
+
+mismatched_date
+```
+
+```{r}
+missing_frp_date <- df_frp %>%
+  inner_join(
+    df_locs,
+    by = c('Sample_Code', 'Station_Name'),
+    suffix = c('_frp', '_loc')
+  ) %>%
+  filter(
+    is.na(Date_frp),
+    !is.na(Date_loc)
+  ) %>%
+  select(Sample_Code, Station_Name, Date_Time_frp, Date_Time_loc) %>%
+  distinct()
+
+missing_frp_date
+```
+
+```{r}
+missing_frp_datetime <- df_frp %>%
+  inner_join(
+    df_locs,
+    by = c('Sample_Code', 'Station_Name'),
+    suffix = c('_frp', '_loc')
+  ) %>%
+  filter(
+    is.na(Date_Time_frp),
+    !is.na(Date_Time_loc)
+  ) %>%
+  select(Sample_Code, Station_Name, Date_Time_frp, Date_Time_loc) %>%
+  distinct()
+
+missing_frp_datetime
+```
+
+```{r}
+df_final <- nutrient_data_discrete %>%
+  left_join(
+    df_locs %>%
+      select(Project, Sample_Code, Station_Name, Latitude, Longitude),
+    by = c('Project', 'Sample_Code', 'Station_Name'),
+    suffix = c('_frp', '_loc')
+  ) %>%
+  mutate(
+    Latitude  = coalesce(Latitude_loc, Latitude_frp),
+    Longitude = coalesce(Longitude_loc, Longitude_frp)
+  ) %>%
+  select(
+    -Latitude_frp, -Latitude_loc,
+    -Longitude_frp, -Longitude_loc
+  )
+```
+

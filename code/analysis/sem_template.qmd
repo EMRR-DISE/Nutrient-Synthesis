@@ -14,18 +14,26 @@ I used the monthly nutrient data for this.
 library(tidyverse)
 library(emmeans)
 library(car)
+library(see)
 library(lme4)
 library(lmerTest)
 library(lubridate)
 theme_set(theme_bw())
 options(contrasts = c('contr.sum', 'contr.poly'))
 source('code/functions/ns_funcs.R')
+conflicts_prefer(lmerTest::lmer)
+conflicts_prefer(dplyr::lag)
 ```
 
 ```{r}
 fp_monthly <- abs_ns_path('Data/monthly_values.csv')
 df_monthly <- read_csv(fp_monthly) %>%
   mutate(Region = factor(Region),
+         Date = make_date(Year, Month, 1)) %>%
+  arrange(Region, Date)
+
+df_monthly <- readRDS('data/processed/monthly_values_withpesp.rds') %>%
+    mutate(Region = factor(Region),
          Date = make_date(Year, Month, 1)) %>%
   arrange(Region, Date)
 ```
@@ -169,7 +177,7 @@ Next, I'm removing columns I won't be using for simplicity.
 
 ```{r}
 df_monthly_rm <- df_monthly %>%
-  select(-c(DissNitrate, DON, Microcystis, SJR_Inflow, Sac_Inflow, TKN, TotPhos))
+  select(-c(DissNitrate, DON, SJR_Inflow, Sac_Inflow, TKN, TotPhos))
 ```
 
 Now I look at the shape of variable distributions to get a sense of what the data looks like.
@@ -366,6 +374,8 @@ If you know you're likely to transform/modify the data, you can do it here so yo
 -   add AR1 lag terms: this is so the previous time point can be used in regressions. I just do this for response variables (log_Chlorophyll and (for later) log_DissAmmonia).
 
 ```{r}
+# conflicts_prefer(dplyr::lag)
+
 # log data
 df_monthly_log <- df_monthly_imputed %>%
   mutate(
@@ -381,9 +391,9 @@ df_monthly_log <- df_monthly_log %>%
   arrange(Region, Date) %>%
   group_by(Region) %>%
   mutate(
-    lag_logChlorophyll = lag(log_Chlorophyll),
-    lag_Chlorophyll = lag(Chlorophyll),
-    lag_logDissAmmonia = lag(log_DissAmmonia)
+    lag_logChlorophyll = dplyr::lag(log_Chlorophyll),
+    lag_Chlorophyll = dplyr::lag(Chlorophyll),
+    lag_logDissAmmonia = dplyr::lag(log_DissAmmonia),
   ) %>%
   ungroup() %>%
   relocate(c(Chlorophyll, log_Chlorophyll, Date),
@@ -555,7 +565,9 @@ df_monthly_subset <- df_monthly_log %>%
 
 df_monthly_subset <- df_monthly_subset %>%
   slice(-c(5, 337))
+```
 
+```{r}
 df_monthly_subset <- df_monthly_subset %>%
   mutate(
     Temp_poly = poly(Temperature, 3),
@@ -637,17 +649,23 @@ ggplot(df_test, aes(x = pred_log_Chl, y = log_Chlorophyll)) +
   theme_minimal()
 ```
 
-Looks pretty good! It does overestimate, but it's a consistent offset and not horribly off.
+Looks okay! It does overestimate, but it's a consistent offset and not horribly off.
 
 Next is model diagnostics:
+
+**Root mean square error/mean absolute error/bias**
 
 ```{r}
 RMSE <- sqrt(mean((df_test$log_Chlorophyll - df_test$pred_log_Chl)^2))
 MAE  <- mean(abs(df_test$log_Chlorophyll - df_test$pred_log_Chl))
 bias <- mean(df_test$pred_log_Chl - df_test$log_Chlorophyll)
 
-print(RMSE); print(MAE); print(bias)
+print(exp(RMSE)); print(exp(MAE)); print(exp(bias))
 ```
+
+Based on MAE, model is off by \~40% on average. The RMSE says its off by \~ 53%, which indicates some larger errors. Based on bias, the model over-predicts by \~15%.
+
+**Intraclass correlation coefficient (ICC)**
 
 ```{r}
 varcomp <- as.data.frame(VarCorr(fit_chl))
@@ -659,9 +677,17 @@ ICC <- var_re / (var_re + var_res)
 print(ICC)
 ```
 
+\~14% of the total variance is explained by between-region variance, which justifies the random intercept term.
+
+**fitted vs residual plot**
+
 ```{r}
 plot(fit_chl)
 ```
+
+Residuals look i.i.d., which is what we want (ie. randomly scattered about 0).
+
+**autocorrelation function**
 
 ```{r}
 res <- residuals(fit_chl)
@@ -680,10 +706,20 @@ for (r in regions) {
 }
 ```
 
+We see that no lags are statistically significant in any region, which is what we want (the few minor ones at higher lags can be ignored).
+
+**significant outliers**
+
 ```{r}
 infl <- performance::check_outliers(fit_chl)
+
 infl
+plot(infl)
 ```
+
+Based on Cook's distance there are no significant outliers.
+
+**quantile-quantile plot**
 
 ```{r}
 res <- residuals(fit_chl)
@@ -691,6 +727,10 @@ res <- residuals(fit_chl)
 qqnorm(res)
 qqline(res, col = 'red', lwd = 2)
 ```
+
+Our data mostly follows the 1:1 line, indicating normality, with some slight deviations due to skew.
+
+**Overall**
 
 Model diagnostics look pretty good; a few minor lag spikes, and there's some right-tail skew, but neither are particularly noteworthy. A few acf graphs do show some seasonality but it's not significant.
 
@@ -755,6 +795,8 @@ for (r in regions) {
 ```{r}
 infl <- performance::check_outliers(fit_chl)
 infl
+
+plot(infl)
 ```
 
 ```{r}
@@ -1111,3 +1153,9 @@ summary(psem_gam, standardize = 'scale')
 ```
 
 Our $R^2$ improved, though our interpretations of significance didn't change much, which makes sense. The biggest advantage is that, by examining the individual GAMs, we can visualize/interpret any underlying non-linear relationships in a way that LMMs can't.
+
+
+# Export for other explorations
+```{r}
+saveRDS(df_monthly_subset, 'data/examples/draft_monthly_data.rds')
+```
