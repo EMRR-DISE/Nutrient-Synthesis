@@ -531,7 +531,9 @@ df_dwq_c2 <- df_dwq_c1 %>%
     names_pattern = "(.*)_(.*)"
   ) %>%
   drop_na(Result) %>%
-  replace_na(list(Sign = "="))
+  replace_na(list(Sign = "=")) |>
+  # Rename Microcystis to MVI
+  mutate(Parameter = if_else(Parameter == "Microcystis", "MVI", Parameter))
 ```
 
 Consolidate Turbidity parameters and prefer TurbidityNTU when both NTU and FNU were collected.
@@ -684,8 +686,8 @@ ls_dwq_avg_wide <- lst(df_dwq_avg_mo, df_dwq_avg_seas) %>%
       select(x, -Num_samples) %>%
         pivot_wider(names_from = Parameter, values_from = Result) %>%
         mutate(
-          # Round Microcystis to nearest whole number
-          Microcystis_round = round(Microcystis),
+          # Round MVI to nearest whole number
+          MVI_round = round(MVI),
           # Convert average H+ concentration to average pH
           pH = -log10(pH)
         )
