@@ -46,15 +46,9 @@ library(here)
 library(conflicted)
 theme_set(theme_bw())
 options(contrasts = c('contr.sum', 'contr.poly'))
-<<<<<<< HEAD
-source('code/functions/ns_funcs.R')
-conflicts_prefer(lmerTest::lmer)
-conflicts_prefer(dplyr::lag)
-=======
 
 # Declare package conflict preferences
 conflicts_prefer(dplyr::filter(), dplyr::lag(), lme4::lmer())
->>>>>>> fafc1f8e7daa7f5e23fdd6efa5acbf8e73ca6e01
 ```
 
 ```{r}
@@ -84,18 +78,12 @@ df_monthly <- readRDS(here("data/processed/monthly_values.rds")) %>%
   select(MonthYear, Year, Month, Date, Region, all_of(wq_param)) %>%
   arrange(Region, Date)
 
-df_monthly <- readRDS('data/processed/monthly_values_withpesp.rds') %>%
-    mutate(Region = factor(Region),
-         Date = make_date(Year, Month, 1)) %>%
-  arrange(Region, Date)
-
 df_monthly_long <- df_monthly %>%
   pivot_longer(
     cols = all_of(wq_param),
     names_to = "Variable",
     values_to = "Value"
   )
-
 ```
 
 # Exploratory Analysis (Data)
