@@ -1258,7 +1258,7 @@ df_pesp <- df_pesp %>%
   st_drop_geometry()
 ```
 
-```{r}
+```{r pesp prepare data}
 # only HAB genus' for now
 # target genera
 target_genera <- c(
@@ -1350,13 +1350,10 @@ monthly_values <-
     df_wyt_2010_2024_mo,
     df_clams_avg_mo,
     df_veg_index_avg_mo,
-    df_wind_mo
+    df_wind_mo,
+    df_filledhab
   ) %>%
   reduce(left_join)
-
-# Create an additional data frame of Monthly-Regional values that includes the PESP data
-monthly_values_withpesp <- monthly_values |>
-  left_join(df_filledhab, by = join_by(Year, Month, Region))
 ```
 
 ```{r combine seasonal values}
@@ -1389,7 +1386,7 @@ seasonal_values <-
 Export the monthly and seasonal data as .csv and .rds files for the models.
 
 ```{r export final data}
-ls_final_data <- lst(monthly_values, monthly_values_withpesp, seasonal_values)
+ls_final_data <- lst(monthly_values, seasonal_values)
 fp_processed <- here("data/processed")
 
 # Export data as csv files
