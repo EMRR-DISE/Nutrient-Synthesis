@@ -43,6 +43,7 @@ conflicts_prefer(dplyr::filter(), hms::hms())
 devtools::session_info()
 ```
 
+## Load Functions
 Create functions used in this document:
 
 ```{r functions}
@@ -119,6 +120,8 @@ add_season <- function(df) {
 ```
 
 Load globally-used data:
+
+## Load Regions
 
 ```{r load global data}
 # Load regions shapefile
@@ -1244,6 +1247,8 @@ We'll only include monthly values for the wind variables for now.
 
 # PESP
 
+## Import Data
+
 ```{r pesp import data}
 df_pesp <- readRDS(here("data/external/pesp_2013_2024.rds"))
 
@@ -1258,67 +1263,154 @@ df_pesp <- df_pesp %>%
   st_drop_geometry()
 ```
 
-```{r pesp prepare data}
-# only HAB genus' for now
-# target genera
-target_genera <- c(
-  'Microcystis',
-  'Aphanizominon',
-  'Dolichospermum',
-  'Pseudoanabaena',
-  'Planktothrix',
-  'Sphaerospermopsis',
-  'Aphanizomenon'
-)
+```{r}
+df_pesp %>%
+  group_by(Region) %>%
+  summarize(n_stations = n_distinct(Station))
 
-# stations sampled
-station_months <- df_pesp %>%
-  mutate(
-    Year = year(Date),
-    Month = month(Date)
-  ) %>%
-  distinct(Year, Month, Region, Station)
-
-# HAB biovol (all target genera)
-hab_station_month <- df_pesp %>%
-  filter(Genus %in% target_genera) %>%
-  mutate(
-    Year = year(Date),
-    Month = month(Date)
-  ) %>%
-  summarize(
-    hab_biovol_station = sum(Biovolume_per_mL, na.rm = TRUE),
-    .by = c(Year, Month, Region, Station)
-  )
-
-# microcystis only biovol
-mc_station_month <- df_pesp %>%
-  filter(Genus == 'Microcystis') %>%
-  mutate(
-    Year = year(Date),
-    Month = month(Date)
-  ) %>%
-  summarize(
-    mc_biovol_station = sum(Biovolume_per_mL, na.rm = TRUE),
-    .by = c(Year, Month, Region, Station)
-  )
-
-# fill in zeros and aggregate
-df_filledhab <-
-  list(station_months, hab_station_month, mc_station_month) |>
-  reduce(\(x, y) left_join(x, y, by = join_by(Year, Month, Region, Station))) |>
-  replace_na(list(hab_biovol_station = 0, mc_biovol_station = 0)) |>
-  summarize(
-    hab_sum = sum(hab_biovol_station, na.rm = TRUE),
-    mc_sum = sum(mc_biovol_station, na.rm = TRUE),
-    num_stations = n_distinct(Station),
-    AllBiovol_per_mL = hab_sum / num_stations,
-    MCBiovol_per_mL = mc_sum / num_stations,
-    .by = c(Year, Month, Region)
-  ) %>%
-  select(Year, Month, Region, AllBiovol_per_mL, MCBiovol_per_mL)
+unique(df_pesp$AlgalGroup)
 ```
 
+
+## Prepare Data
+
+Goal: Biovolume per Algal Group per Region per Month-Year
+
+- sum total biovolume per Station, Date, and Algal Group (Sum1)
+
+- per month, average data from multi-sampled stations (for overall weighted average)
+
+- sum over all Sum1's in the given Month-Year per Region
+
+- divide by the number of Stations in that Region + Month-Year that collected data (regardless of if they have data for a particular group)
+
+```{r}
+test <- df_pesp %>%
+  filter(format(Date, '%Y-%m') == '2017-08') %>%
+  distinct(Region, Station, Date)
+```
+
+
+### Biovolume
+```{r}
+# total biovolume per station-date-algal group(-region)
+df_sum1_bio <- df_pesp %>%
+  group_by(Region, Station, Date, AlgalGroup) %>%
+  summarize(Total_Biovolume = sum(Biovolume_per_mL, na.rm = TRUE), .groups = 'drop')
+
+# average across dates within each station-monthyear
+df_sum2_bio <- df_sum1_bio %>%
+  mutate(MonthYear = floor_date(Date, 'month')) %>%
+  group_by(Region, Station, MonthYear, AlgalGroup) %>%
+  summarize(Station_Biovolume = mean(Total_Biovolume, na.rm = TRUE), .groups = 'drop')
+
+# count unique stations per region-monthyear
+station_count <- df_pesp %>%
+  filter(!is.na(Biovolume_per_mL)) %>%
+  mutate(MonthYear = floor_date(Date, 'month')) %>%
+  group_by(Region, MonthYear) %>%
+  summarize(n_stations = n_distinct(Station), .groups = 'drop')
+
+# average across stations
+df_meanbio <- df_sum2_bio %>%
+  group_by(Region, MonthYear, AlgalGroup) %>%
+  summarize(Sum_Biovolume = sum(Station_Biovolume, na.rm = TRUE), .groups = 'drop') %>%
+  left_join(station_count, by = c('Region', 'MonthYear')) %>%
+  mutate(Mean_Biovolume = Sum_Biovolume / n_stations,
+         MonthYear = format(MonthYear, '%b-%Y'))
+
+# pivot to wide
+df_meanbio_mo <- df_meanbio %>%
+  pivot_wider(
+    id_cols = c(Region, MonthYear),
+    names_from = AlgalGroup,
+    values_from = Mean_Biovolume,
+    names_glue = 'bv_{AlgalGroup}'
+  )
+```
+
+### Units
+```{r}
+# total units per station-date-algal group
+df_sum1_units <- df_pesp %>%
+  group_by(Region, Station, Date, AlgalGroup) %>%
+  summarize(Total_Units = sum(Units_per_mL, na.rm = TRUE), .groups = 'drop')
+
+# average across dates within each station-monthyear
+df_sum2_units <- df_sum1_units %>%
+  mutate(MonthYear = floor_date(Date, 'month')) %>%
+  group_by(Region, Station, MonthYear, AlgalGroup) %>%
+  summarize(Station_Units = mean(Total_Units, na.rm = TRUE), .groups = 'drop')
+
+# count unique stations per region-monthyear
+station_count_units <- df_pesp %>%
+  filter(!is.na(Units_per_mL)) %>%
+  mutate(MonthYear = floor_date(Date, 'month')) %>%
+  group_by(Region, MonthYear) %>%
+  summarize(n_stations = n_distinct(Station), .groups = 'drop')
+
+# average across stations
+df_meanunits <- df_sum2_units %>%
+  group_by(Region, MonthYear, AlgalGroup) %>%
+  summarize(Sum_Units = sum(Station_Units, na.rm = TRUE), .groups = 'drop') %>%
+  left_join(station_count_units, by = c('Region', 'MonthYear')) %>%
+  mutate(Mean_Units = Sum_Units / n_stations,
+         MonthYear = format(MonthYear, '%b-%Y'))
+
+# pivot to wide
+df_meanunits_mo <- df_meanunits %>%
+  pivot_wider(
+    id_cols = c(Region, MonthYear),
+    names_from = AlgalGroup,
+    values_from = Mean_Units,
+    names_glue = 'units_{AlgalGroup}'
+  )
+```
+
+### Combine
+```{r}
+df_pesp_mo <- df_meanbio_mo %>%
+  full_join(df_meanunits_mo, by = c('Region', 'MonthYear'))
+```
+
+
+### Check
+```{r}
+df_pesp_mo %>%
+  summarize(across(everything(), ~sum(!is.na(.)))) %>%
+  pivot_longer(everything(), names_to = 'column', values_to = 'n_non_na') %>%
+  mutate(metric = case_when(
+    str_starts(column, 'bv_') ~ 'biovolume',
+    str_starts(column, 'units_') ~ 'units'
+  ),
+  AlgalGroup = str_remove(column, '^bv_|^units_')) %>%
+  filter(!is.na(metric)) %>%
+  select(AlgalGroup, metric, n_non_na) %>%
+  pivot_wider(names_from = metric, values_from = n_non_na)
+```
+
+
+### Clean Data
+
+Remove groups with little data
+```{r}
+df_pesp_mo <- df_pesp_mo %>%
+  select(-matches('Raphidophytes|Ciliates|Coccolithophores|Ochrophytes|Xanthophytes|Eustigmatophytes|Dinoflagellates|Euglenoids|Chrysophytes'))
+
+df_pesp_mo <- df_pesp_mo %>%
+  mutate(
+    date_temp = as.Date(paste0('01-', MonthYear), '%d-%b-%Y'),
+    Year = year(date_temp),
+    Month = month(date_temp)
+  ) %>%
+  select(-date_temp)
+
+df_pesp_sea <- df_pesp_mo %>%
+  add_season() %>%
+  select(-Month, -MonthYear) %>%
+  group_by(Region, Season, Year) %>%
+  summarize(across(where(is.numeric), ~na_if(mean(., na.rm = TRUE), NaN)), .groups = 'drop')
+```
 
 # Combine All Data
 
@@ -1351,7 +1443,7 @@ monthly_values <-
     df_clams_avg_mo,
     df_veg_index_avg_mo,
     df_wind_mo,
-    df_filledhab
+    df_pesp_mo
   ) %>%
   reduce(left_join)
 ```
@@ -1376,6 +1468,7 @@ seasonal_values <-
     df_wyt_2010_2024_seas,
     df_clams_avg_seas,
     df_veg_index_avg_seas
+    df_pesp_seas
   ) %>%
   reduce(left_join)
 ```
