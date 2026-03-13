@@ -1263,15 +1263,6 @@ df_pesp <- df_pesp %>%
   st_drop_geometry()
 ```
 
-```{r}
-df_pesp %>%
-  group_by(Region) %>%
-  summarize(n_stations = n_distinct(Station))
-
-unique(df_pesp$AlgalGroup)
-```
-
-
 ## Prepare Data
 
 Goal: Biovolume per Algal Group per Region per Month-Year
@@ -1284,14 +1275,8 @@ Goal: Biovolume per Algal Group per Region per Month-Year
 
 - divide by the number of Stations in that Region + Month-Year that collected data (regardless of if they have data for a particular group)
 
-```{r}
-test <- df_pesp %>%
-  filter(format(Date, '%Y-%m') == '2017-08') %>%
-  distinct(Region, Station, Date)
-```
-
-
 ### Biovolume
+
 ```{r}
 # total biovolume per station-date-algal group(-region)
 df_sum1_bio <- df_pesp %>%
@@ -1330,6 +1315,7 @@ df_meanbio_mo <- df_meanbio %>%
 ```
 
 ### Units
+
 ```{r}
 # total units per station-date-algal group
 df_sum1_units <- df_pesp %>%
@@ -1368,13 +1354,14 @@ df_meanunits_mo <- df_meanunits %>%
 ```
 
 ### Combine
+
 ```{r}
 df_pesp_mo <- df_meanbio_mo %>%
   full_join(df_meanunits_mo, by = c('Region', 'MonthYear'))
 ```
 
-
 ### Check
+
 ```{r}
 df_pesp_mo %>%
   summarize(across(everything(), ~sum(!is.na(.)))) %>%
@@ -1389,10 +1376,10 @@ df_pesp_mo %>%
   pivot_wider(names_from = metric, values_from = n_non_na)
 ```
 
-
 ### Clean Data
 
 Remove groups with little data
+
 ```{r}
 df_pesp_mo <- df_pesp_mo %>%
   select(-matches('Raphidophytes|Ciliates|Coccolithophores|Ochrophytes|Xanthophytes|Eustigmatophytes|Dinoflagellates|Euglenoids|Chrysophytes'))
@@ -1403,13 +1390,21 @@ df_pesp_mo <- df_pesp_mo %>%
     Year = year(date_temp),
     Month = month(date_temp)
   ) %>%
-  select(-date_temp)
+  select(-c(date_temp, MonthYear))
 
-df_pesp_sea <- df_pesp_mo %>%
+# Further calculate Seasonal-Regional averages using Adjusted calendar year:
+# December-November, with December of the previous calendar year included with the
+# following year
+df_pesp_seas <- df_pesp_mo %>%
+  mutate(YearAdj = if_else(Month == 12, Year + 1, Year)) |>
   add_season() %>%
-  select(-Month, -MonthYear) %>%
-  group_by(Region, Season, Year) %>%
-  summarize(across(where(is.numeric), ~na_if(mean(., na.rm = TRUE), NaN)), .groups = 'drop')
+  summarize(
+    across(
+      starts_with(c("bv_", "units_")),
+      \(x) na_if(mean(x, na.rm = TRUE), NaN)
+    ),
+    .by = c(YearAdj, Season, Region)
+  )
 ```
 
 # Combine All Data
@@ -1467,7 +1462,7 @@ seasonal_values <-
     df_dayflow_tot_seas,
     df_wyt_2010_2024_seas,
     df_clams_avg_seas,
-    df_veg_index_avg_seas
+    df_veg_index_avg_seas,
     df_pesp_seas
   ) %>%
   reduce(left_join)

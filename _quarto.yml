@@ -15,9 +15,6 @@ website:
         href: https://github.com/EMRR-DISE/Nutrient-Synthesis
         aria-label: GitHub
 
-execute:
-  freeze: auto
-
 format:
   html:
     theme: cosmo
