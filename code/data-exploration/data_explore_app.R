@@ -53,24 +53,48 @@ ui <- page_navbar(
     conditionalPanel(
       condition = "input.nav == 'xy_plot'",
       selectInput("scatt_x", "X variable", choices = plot_vars),
+      radioButtons(
+        "scatt_x_log",
+        "Log-transform X variable?",
+        choices = c("No", "Yes"),
+        inline = TRUE
+      ),
       selectInput("scatt_y", "Y variable", choices = plot_vars),
       radioButtons(
-        "facet_opt",
+        "scatt_y_log",
+        "Log-transform Y variable?",
+        choices = c("No", "Yes"),
+        inline = TRUE
+      ),
+      radioButtons(
+        "scatt_facet_opt",
         "Facet Options",
         choices = c(
-          "none",
-          "Region",
-          "Month",
-          "Season",
-          "Region and Month",
-          "Region and Season"
+          "None" = "none",
+          "Region" = "region",
+          "Month" = "month",
+          "Season" = "season",
+          "Region and Month" = "region_month",
+          "Region and Season" = "region_season"
         ),
-        selected = "Region"
+        selected = "region"
+      ),
+      radioButtons(
+        "scatt_trendline",
+        "Add a linear trend-line?",
+        choices = c("No", "Yes"),
+        inline = TRUE
       )
     ),
     conditionalPanel(
       condition = "input.nav == 'ts_plot'",
-      selectInput("ts_y", "Y variable", choices = plot_vars)
+      selectInput("ts_y", "Y variable", choices = plot_vars),
+      radioButtons(
+        "ts_y_log",
+        "Log-transform Y variable?",
+        choices = c("No", "Yes"),
+        inline = TRUE
+      )
     ),
     conditionalPanel(
       condition = "input.nav == 'boxplot'",
@@ -78,15 +102,21 @@ ui <- page_navbar(
         "box_x",
         "X variable",
         choices = c(
-          "Region",
-          "Month",
-          "Season",
-          "Region and Month",
-          "Region and Season"
+          "Region" = "region",
+          "Month" = "month",
+          "Season" = "season",
+          "Region and Month" = "region_month",
+          "Region and Season" = "region_season"
         ),
-        selected = "Region"
+        selected = "region"
       ),
-      selectInput("box_y", "Y variable", choices = plot_vars_box)
+      selectInput("box_y", "Y variable", choices = plot_vars_box),
+      radioButtons(
+        "box_y_log",
+        "Log-transform Y variable?",
+        choices = c("No", "Yes"),
+        inline = TRUE
+      )
     ),
     width = 300
   ),
@@ -111,61 +141,81 @@ server <- function(input, output, session) {
   output$plot_xy <- renderPlot(
     {
       xy_plt_base <- df_monthly |>
-        ggplot(
-          aes(
-            x = .data[[input$scatt_x]],
-            y = .data[[input$scatt_y]],
-            color = Region
-          )
-        ) +
+        ggplot(aes(color = Region)) +
         geom_point(na.rm = TRUE, alpha = 0.7) +
         theme_bw()
 
+      xy_plt_base <- switch(
+        input$scatt_x_log,
+        No = xy_plt_base + aes(x = .data[[input$scatt_x]]),
+        Yes = xy_plt_base + aes(x = log(.data[[input$scatt_x]]))
+      )
+
+      xy_plt_base <- switch(
+        input$scatt_y_log,
+        No = xy_plt_base + aes(y = .data[[input$scatt_y]]),
+        Yes = xy_plt_base + aes(y = log(.data[[input$scatt_y]]))
+      )
+
+      xy_plt_base <- switch(
+        input$scatt_trendline,
+        No = xy_plt_base,
+        Yes = xy_plt_base +
+          geom_smooth(na.rm = TRUE, method = "lm", formula = "y ~ x")
+      )
+
       switch(
-        input$facet_opt,
+        input$scatt_facet_opt,
         none = xy_plt_base,
-        Region = xy_plt_base + facet_wrap(vars(Region), scales = "free"),
-        Month = xy_plt_base + facet_wrap(vars(Month), scales = "free"),
-        Season = xy_plt_base + facet_wrap(vars(Season), scales = "free"),
-        `Region and Month` = xy_plt_base +
+        region = xy_plt_base + facet_wrap(vars(Region), scales = "free"),
+        month = xy_plt_base + facet_wrap(vars(Month), scales = "free"),
+        season = xy_plt_base + facet_wrap(vars(Season), scales = "free"),
+        region_month = xy_plt_base +
           facet_grid(rows = vars(Region), cols = vars(Month), scales = "free"),
-        `Region and Season` = xy_plt_base +
+        region_season = xy_plt_base +
           facet_grid(rows = vars(Region), cols = vars(Season), scales = "free")
       )
     },
     res = 96,
     width = function() {
       switch(
-        input$facet_opt,
+        input$scatt_facet_opt,
         none = 650,
-        Region = 950,
-        Month = 1000,
-        Season = 775,
-        `Region and Month` = 1300,
-        `Region and Season` = 850
+        region = 950,
+        month = 1000,
+        season = 775,
+        region_month = 1300,
+        region_season = 850
       )
     },
     height = function() {
       switch(
-        input$facet_opt,
+        input$scatt_facet_opt,
         none = 500,
-        Region = 550,
-        Month = 600,
-        Season = 600,
-        `Region and Month` = 675,
-        `Region and Season` = 775
+        region = 550,
+        month = 600,
+        season = 600,
+        region_month = 675,
+        region_season = 775
       )
     }
   )
 
   output$plot_ts <- renderPlot(
     {
-      df_monthly |>
-        ggplot(aes(x = Date, y = .data[[input$ts_y]])) +
+      ts_plt_base <- df_monthly |>
+        ggplot(aes(x = Date)) +
         geom_point(na.rm = TRUE, alpha = 0.6) +
+        geom_line(na.rm = TRUE) +
         theme_bw() +
         facet_grid(rows = vars(Region), scales = "free") +
         scale_x_date(date_breaks = "year", date_labels = "%Y")
+
+      switch(
+        input$ts_y_log,
+        No = ts_plt_base + aes(y = .data[[input$ts_y]]),
+        Yes = ts_plt_base + aes(y = log(.data[[input$ts_y]]))
+      )
     },
     res = 96,
     width = 900,
@@ -175,25 +225,31 @@ server <- function(input, output, session) {
   output$plot_box <- renderPlot(
     {
       boxplt_base <- df_monthly |>
-        ggplot(aes(y = .data[[input$box_y]])) +
+        ggplot() +
         geom_boxplot(na.rm = TRUE) +
         theme_bw()
 
+      boxplt_base <- switch(
+        input$box_y_log,
+        No = boxplt_base + aes(y = .data[[input$box_y]]),
+        Yes = boxplt_base + aes(y = log(.data[[input$box_y]]))
+      )
+
       switch(
         input$box_x,
-        Region = boxplt_base + aes(x = Region),
-        Month = boxplt_base + aes(x = Month),
-        Season = boxplt_base + aes(x = Season),
-        `Region and Month` = boxplt_base +
+        region = boxplt_base + aes(x = Region),
+        month = boxplt_base + aes(x = Month),
+        season = boxplt_base + aes(x = Season),
+        region_month = boxplt_base +
           aes(x = Month) +
           facet_grid(rows = vars(Region), scales = "free"),
-        `Region and Season` = boxplt_base + aes(x = Region, fill = Season)
+        region_season = boxplt_base + aes(x = Region, fill = Season)
       )
     },
     res = 96,
     width = 800,
     height = function() {
-      ifelse(input$box_x == "Region and Month", 700, 600)
+      ifelse(input$box_x == "region_month", 700, 600)
     }
   )
 }
