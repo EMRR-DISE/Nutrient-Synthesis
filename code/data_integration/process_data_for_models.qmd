@@ -347,34 +347,41 @@ ls_nutr_avg_wide <- lst(df_nutr_avg_mo, df_nutr_avg_seas) %>%
   )
 ```
 
+```{r remove extra dfs for memory efficiency}
+rm(df_nutr_c1, df_nutr_c2, df_nutr_c3, df_nutr_c4, df_nutr_c5, df_frp_phyto_coord)
+rm(df_nutr_daily_dups_fixed, df_nutr_daily_dups)
+rm(df_nutr_dt_dups, df_nutr_dt_dups_fixed, df_nutr_dups_nodt, df_nutr_dups_nodt_fixed)
+rm(df_nutr)
+```
+
 ## Sampling Effort Plots
 
 ### Biweekly Values
 
 ```{r dwr nutr samp effort biweekly values}
-ls_nutr_avg_biweekly_plt <- df_nutr_avg_biweekly %>%
-  complete(nesting(Year, Biweekly_cat), Region, Analyte) %>%
-  nest(.by = Analyte) %>%
-  deframe() %>%
-  imap(
-    \(x, idx) {
-      ggplot(data = x, aes(x = Year, y = Region, fill = Num_samples)) +
-        geom_tile() +
-        facet_wrap(vars(Biweekly_cat)) +
-        ggtitle(idx) +
-        scale_y_discrete(drop = FALSE) +
-        scale_x_continuous(
-          breaks = breaks_pretty(10),
-          expand = expansion(mult = 0.02)
-        ) +
-        scale_fill_viridis_c(
-          name = "Number of\nSamples",
-          na.value = "transparent"
-        ) +
-        theme_bw() +
-        theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
-    }
-  )
+# ls_nutr_avg_biweekly_plt <- df_nutr_avg_biweekly %>%
+#   complete(nesting(Year, Biweekly_cat), Region, Analyte) %>%
+#   nest(.by = Analyte) %>%
+#   deframe() %>%
+#   imap(
+#     \(x, idx) {
+#       ggplot(data = x, aes(x = Year, y = Region, fill = Num_samples)) +
+#         geom_tile() +
+#         facet_wrap(vars(Biweekly_cat)) +
+#         ggtitle(idx) +
+#         scale_y_discrete(drop = FALSE) +
+#         scale_x_continuous(
+#           breaks = breaks_pretty(10),
+#           expand = expansion(mult = 0.02)
+#         ) +
+#         scale_fill_viridis_c(
+#           name = "Number of\nSamples",
+#           na.value = "transparent"
+#         ) +
+#         theme_bw() +
+#         theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+#     }
+#   )
 ```
 
 ::: {.panel-tabset}
@@ -385,13 +392,13 @@ ls_nutr_avg_biweekly_plt <- df_nutr_avg_biweekly %>%
 #| fig-width: 8
 #| fig-height: 8
 
-for (i in 1:length(ls_nutr_avg_biweekly_plt)) {
-  # Create subheadings for each Parameter
-  cat("#### ", names(ls_nutr_avg_biweekly_plt[i]), "\n\n")
-  # Print plot
-  print(ls_nutr_avg_biweekly_plt[[i]])
-  cat("\n\n")
-}
+# for (i in 1:length(ls_nutr_avg_biweekly_plt)) {
+#   # Create subheadings for each Parameter
+#   cat("#### ", names(ls_nutr_avg_biweekly_plt[i]), "\n\n")
+#   # Print plot
+#   print(ls_nutr_avg_biweekly_plt[[i]])
+#   cat("\n\n")
+# }
 ```
 
 :::
@@ -399,30 +406,30 @@ for (i in 1:length(ls_nutr_avg_biweekly_plt)) {
 ### Monthly Values
 
 ```{r dwr nutr samp effort monthly values}
-ls_nutr_avg_mo_plt <- df_nutr_avg_mo %>%
-  mutate(Month = month(Month, label = TRUE)) %>%
-  complete(nesting(Year, Month), Region, Analyte) %>%
-  nest(.by = Analyte) %>%
-  deframe() %>%
-  imap(
-    \(x, idx) {
-      ggplot(data = x, aes(x = Year, y = Region, fill = Num_samples)) +
-        geom_tile() +
-        facet_wrap(vars(Month)) +
-        ggtitle(idx) +
-        scale_y_discrete(drop = FALSE) +
-        scale_x_continuous(
-          breaks = breaks_pretty(10),
-          expand = expansion(mult = 0.02)
-        ) +
-        scale_fill_viridis_c(
-          name = "Number of\nSamples",
-          na.value = "transparent"
-        ) +
-        theme_bw() +
-        theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
-    }
-  )
+# ls_nutr_avg_mo_plt <- df_nutr_avg_mo %>%
+#   mutate(Month = month(Month, label = TRUE)) %>%
+#   complete(nesting(Year, Month), Region, Analyte) %>%
+#   nest(.by = Analyte) %>%
+#   deframe() %>%
+#   imap(
+#     \(x, idx) {
+#       ggplot(data = x, aes(x = Year, y = Region, fill = Num_samples)) +
+#         geom_tile() +
+#         facet_wrap(vars(Month)) +
+#         ggtitle(idx) +
+#         scale_y_discrete(drop = FALSE) +
+#         scale_x_continuous(
+#           breaks = breaks_pretty(10),
+#           expand = expansion(mult = 0.02)
+#         ) +
+#         scale_fill_viridis_c(
+#           name = "Number of\nSamples",
+#           na.value = "transparent"
+#         ) +
+#         theme_bw() +
+#         theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+#     }
+#   )
 ```
 
 ::: {.panel-tabset}
@@ -433,13 +440,13 @@ ls_nutr_avg_mo_plt <- df_nutr_avg_mo %>%
 #| fig-width: 8
 #| fig-height: 6
 
-for (i in 1:length(ls_nutr_avg_mo_plt)) {
-  # Create subheadings for each Parameter
-  cat("#### ", names(ls_nutr_avg_mo_plt[i]), "\n\n")
-  # Print plot
-  print(ls_nutr_avg_mo_plt[[i]])
-  cat("\n\n")
-}
+# for (i in 1:length(ls_nutr_avg_mo_plt)) {
+#   # Create subheadings for each Parameter
+#   cat("#### ", names(ls_nutr_avg_mo_plt[i]), "\n\n")
+#   # Print plot
+#   print(ls_nutr_avg_mo_plt[[i]])
+#   cat("\n\n")
+# }
 ```
 
 :::
@@ -450,23 +457,26 @@ for (i in 1:length(ls_nutr_avg_mo_plt)) {
 #| fig-width: 8
 #| fig-height: 9
 
-df_nutr_avg_seas %>%
-  ggplot(aes(x = YearAdj, y = Region, fill = Num_samples)) +
-  geom_tile() +
-  facet_grid(
-    rows = vars(Analyte),
-    cols = vars(Season),
-    labeller = label_wrap_gen(width = 20)
-  ) +
-  scale_x_continuous(
-    breaks = breaks_pretty(10),
-    expand = expansion(mult = 0.02)
-  ) +
-  scale_fill_viridis_c(name = "Number of\nSamples") +
-  theme_bw() +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+# df_nutr_avg_seas %>%
+#   ggplot(aes(x = YearAdj, y = Region, fill = Num_samples)) +
+#   geom_tile() +
+#   facet_grid(
+#     rows = vars(Analyte),
+#     cols = vars(Season),
+#     labeller = label_wrap_gen(width = 20)
+#   ) +
+#   scale_x_continuous(
+#     breaks = breaks_pretty(10),
+#     expand = expansion(mult = 0.02)
+#   ) +
+#   scale_fill_viridis_c(name = "Number of\nSamples") +
+#   theme_bw() +
+#   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
 ```
 
+```{r remove extra dfs for memory efficiency}
+rm(df_nutr_avg_biweekly, df_nutr_avg_mo, df_nutr_avg_seas)
+```
 
 # Integrated Discrete WQ Data from discretewq
 
@@ -698,34 +708,43 @@ ls_dwq_avg_wide <- lst(df_dwq_avg_mo, df_dwq_avg_seas) %>%
   )
 ```
 
+```{r remove extra dfs for memory efficiency}
+rm(df_dwq_c1, df_dwq_c2, df_dwq_c3, df_dwq_c4, df_dwq_c5, df_dwq_c6, df_dwq_c7)
+rm(df_dwq_daily_dups_fixed, df_dwq_daily_dups)
+rm(df_dwq_turb_dups, df_dwq_turb_dups_fixed)
+rm(df_dwq_dt_dups, df_dwq_dt_dups_fixed)
+rm(df_dwq)
+```
+
+
 ## Sampling Effort Plots
 
 ### Biweekly Values
 
 ```{r discretewq samp effort biweekly values}
-ls_dwq_avg_biweekly_plt <- df_dwq_avg_biweekly %>%
-  complete(nesting(Year, Biweekly_cat), Region, Parameter) %>%
-  nest(.by = Parameter) %>%
-  deframe() %>%
-  imap(
-    \(x, idx) {
-      ggplot(data = x, aes(x = Year, y = Region, fill = Num_samples)) +
-        geom_tile() +
-        facet_wrap(vars(Biweekly_cat)) +
-        ggtitle(idx) +
-        scale_y_discrete(drop = FALSE) +
-        scale_x_continuous(
-          breaks = breaks_pretty(10),
-          expand = expansion(mult = 0.02)
-        ) +
-        scale_fill_viridis_c(
-          name = "Number of\nSamples",
-          na.value = "transparent"
-        ) +
-        theme_bw() +
-        theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
-    }
-  )
+# ls_dwq_avg_biweekly_plt <- df_dwq_avg_biweekly %>%
+#   complete(nesting(Year, Biweekly_cat), Region, Parameter) %>%
+#   nest(.by = Parameter) %>%
+#   deframe() %>%
+#   imap(
+#     \(x, idx) {
+#       ggplot(data = x, aes(x = Year, y = Region, fill = Num_samples)) +
+#         geom_tile() +
+#         facet_wrap(vars(Biweekly_cat)) +
+#         ggtitle(idx) +
+#         scale_y_discrete(drop = FALSE) +
+#         scale_x_continuous(
+#           breaks = breaks_pretty(10),
+#           expand = expansion(mult = 0.02)
+#         ) +
+#         scale_fill_viridis_c(
+#           name = "Number of\nSamples",
+#           na.value = "transparent"
+#         ) +
+#         theme_bw() +
+#         theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+#     }
+#   )
 ```
 
 ::: {.panel-tabset}
@@ -736,13 +755,13 @@ ls_dwq_avg_biweekly_plt <- df_dwq_avg_biweekly %>%
 #| fig-width: 8
 #| fig-height: 8
 
-for (i in 1:length(ls_dwq_avg_biweekly_plt)) {
-  # Create subheadings for each Parameter
-  cat("#### ", names(ls_dwq_avg_biweekly_plt[i]), "\n\n")
-  # Print plot
-  print(ls_dwq_avg_biweekly_plt[[i]])
-  cat("\n\n")
-}
+# for (i in 1:length(ls_dwq_avg_biweekly_plt)) {
+#   # Create subheadings for each Parameter
+#   cat("#### ", names(ls_dwq_avg_biweekly_plt[i]), "\n\n")
+#   # Print plot
+#   print(ls_dwq_avg_biweekly_plt[[i]])
+#   cat("\n\n")
+# }
 ```
 
 :::
@@ -750,31 +769,31 @@ for (i in 1:length(ls_dwq_avg_biweekly_plt)) {
 ### Monthly Values
 
 ```{r discretewq samp effort monthly values}
-ls_dwq_avg_mo_plt <- df_dwq_avg_mo %>%
-  filter(Year %in% 2010:2024) %>%
-  mutate(Month = month(Month, label = TRUE)) %>%
-  complete(nesting(Year, Month), Region, Parameter) %>%
-  nest(.by = Parameter) %>%
-  deframe() %>%
-  imap(
-    \(x, idx) {
-      ggplot(data = x, aes(x = Year, y = Region, fill = Num_samples)) +
-        geom_tile() +
-        facet_wrap(vars(Month)) +
-        ggtitle(idx) +
-        scale_y_discrete(drop = FALSE) +
-        scale_x_continuous(
-          breaks = breaks_pretty(10),
-          expand = expansion(mult = 0.02)
-        ) +
-        scale_fill_viridis_c(
-          name = "Number of\nSamples",
-          na.value = "transparent"
-        ) +
-        theme_bw() +
-        theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
-    }
-  )
+# ls_dwq_avg_mo_plt <- df_dwq_avg_mo %>%
+#   filter(Year %in% 2010:2024) %>%
+#   mutate(Month = month(Month, label = TRUE)) %>%
+#   complete(nesting(Year, Month), Region, Parameter) %>%
+#   nest(.by = Parameter) %>%
+#   deframe() %>%
+#   imap(
+#     \(x, idx) {
+#       ggplot(data = x, aes(x = Year, y = Region, fill = Num_samples)) +
+#         geom_tile() +
+#         facet_wrap(vars(Month)) +
+#         ggtitle(idx) +
+#         scale_y_discrete(drop = FALSE) +
+#         scale_x_continuous(
+#           breaks = breaks_pretty(10),
+#           expand = expansion(mult = 0.02)
+#         ) +
+#         scale_fill_viridis_c(
+#           name = "Number of\nSamples",
+#           na.value = "transparent"
+#         ) +
+#         theme_bw() +
+#         theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+#     }
+#   )
 ```
 
 ::: {.panel-tabset}
@@ -785,13 +804,13 @@ ls_dwq_avg_mo_plt <- df_dwq_avg_mo %>%
 #| fig-width: 8
 #| fig-height: 6
 
-for (i in 1:length(ls_dwq_avg_mo_plt)) {
-  # Create subheadings for each Parameter
-  cat("#### ", names(ls_dwq_avg_mo_plt[i]), "\n\n")
-  # Print plot
-  print(ls_dwq_avg_mo_plt[[i]])
-  cat("\n\n")
-}
+# for (i in 1:length(ls_dwq_avg_mo_plt)) {
+#   # Create subheadings for each Parameter
+#   cat("#### ", names(ls_dwq_avg_mo_plt[i]), "\n\n")
+#   # Print plot
+#   print(ls_dwq_avg_mo_plt[[i]])
+#   cat("\n\n")
+# }
 ```
 
 :::
@@ -802,20 +821,23 @@ for (i in 1:length(ls_dwq_avg_mo_plt)) {
 #| fig-width: 8
 #| fig-height: 9
 
-df_dwq_avg_seas %>%
-  filter(YearAdj %in% 2010:2024) %>%
-  ggplot(aes(x = YearAdj, y = Region, fill = Num_samples)) +
-  geom_tile() +
-  facet_grid(rows = vars(Parameter), cols = vars(Season)) +
-  scale_x_continuous(
-    breaks = breaks_pretty(10),
-    expand = expansion(mult = 0.02)
-  ) +
-  scale_fill_viridis_c(name = "Number of\nSamples") +
-  theme_bw() +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+# df_dwq_avg_seas %>%
+#   filter(YearAdj %in% 2010:2024) %>%
+#   ggplot(aes(x = YearAdj, y = Region, fill = Num_samples)) +
+#   geom_tile() +
+#   facet_grid(rows = vars(Parameter), cols = vars(Season)) +
+#   scale_x_continuous(
+#     breaks = breaks_pretty(10),
+#     expand = expansion(mult = 0.02)
+#   ) +
+#   scale_fill_viridis_c(name = "Number of\nSamples") +
+#   theme_bw() +
+#   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
 ```
 
+```{r remove extra dfs for memory efficiency}
+rm(df_dwq_avg_biweekly, df_dwq_avg_mo, df_dwq_avg_seas)
+```
 
 # DAYFLOW
 
@@ -866,6 +888,9 @@ df_dayflow_tot_seas <- df_dayflow_tot_mo %>%
   summarize(across(ends_with("Inflow"), sum), .by = c(YearAdj, Season))
 ```
 
+```{r remove extra dfs for memory efficiency}
+rm(df_dayflow, ls_dayflow)
+```
 
 # Water Year Hydrologic Classification Indices
 
@@ -897,6 +922,9 @@ df_wyt_2010_2024_seas <- df_wyt_2010_2024_mo %>%
   distinct()
 ```
 
+```{r remove extra dfs for memory efficiency}
+rm(df_wyt_2010_2024)
+```
 
 # Clam Data
 
@@ -1083,6 +1111,12 @@ df_clams_avg_seas <- df_clams_avg_mo %>%
   )
 ```
 
+```{r remove extra dfs for memory efficiency}
+rm(df_usgs_clams, df_usgs_clams_biomass, df_usgs_clams_c, df_usgs_clams_rates, ndf_usgs_clams)
+rm(df_smscg_clams, df_smscg_clams_c)
+rm(df_drt_clams, ls_drt_clams)
+rm(df_clams_all, df_clams_all_c)
+```
 
 # Vegetation Index Data
 
@@ -1180,6 +1214,9 @@ df_veg_index_avg_seas <- df_veg_index_avg_mo %>%
   )
 ```
 
+```{r remove extra dfs for memory efficiency}
+rm(df_veg_index, df_veg_index_c, df_veg_index_stations)
+```
 
 # Wind Data
 
@@ -1242,6 +1279,10 @@ df_wind_mo <- ndf_wind_mo %>%
   )
 ```
 
+```{r remove extra dfs for memory efficiency}
+rm(ndf_wind_mo)
+```
+
 We'll only include monthly values for the wind variables for now.
 
 
@@ -1263,6 +1304,22 @@ df_pesp <- df_pesp %>%
   st_drop_geometry()
 ```
 
+## Add Carbon Biomass Conversions
+```{r}
+df_pesp <- df_pesp %>%
+  mutate(
+    C_biomass = case_when(
+      AlgalGroup == 'Diatoms' ~
+        (0.288*(Biovolume_per_mL / Cells_per_mL)^0.811 * Cells_per_mL) / 1000,
+      AlgalGroup == 'Dinoflagellates' ~
+        (0.760*(Biovolume_per_mL / Cells_per_mL)^0.819 * Cells_per_mL) / 1000,
+      TRUE ~
+        (0.216*(Biovolume_per_mL / Cells_per_mL)^0.939 * Cells_per_mL) / 1000
+    )
+  )
+```
+
+
 ## Prepare Data
 
 Goal: Biovolume per Algal Group per Region per Month-Year
@@ -1281,16 +1338,16 @@ Goal: Biovolume per Algal Group per Region per Month-Year
 # total biovolume per station-date-algal group(-region)
 df_sum1_bio <- df_pesp %>%
   group_by(Region, Station, Date, AlgalGroup) %>%
-  summarize(Total_Biovolume = sum(Biovolume_per_mL, na.rm = TRUE), .groups = 'drop')
+  summarize(total_biovol = sum(Biovolume_per_mL, na.rm = TRUE), .groups = 'drop')
 
 # average across dates within each station-monthyear
 df_sum2_bio <- df_sum1_bio %>%
   mutate(MonthYear = floor_date(Date, 'month')) %>%
   group_by(Region, Station, MonthYear, AlgalGroup) %>%
-  summarize(Station_Biovolume = mean(Total_Biovolume, na.rm = TRUE), .groups = 'drop')
+  summarize(station_biovol = mean(total_biovol, na.rm = TRUE), .groups = 'drop')
 
 # count unique stations per region-monthyear
-station_count <- df_pesp %>%
+station_count_bio <- df_pesp %>%
   filter(!is.na(Biovolume_per_mL)) %>%
   mutate(MonthYear = floor_date(Date, 'month')) %>%
   group_by(Region, MonthYear) %>%
@@ -1299,9 +1356,9 @@ station_count <- df_pesp %>%
 # average across stations
 df_meanbio <- df_sum2_bio %>%
   group_by(Region, MonthYear, AlgalGroup) %>%
-  summarize(Sum_Biovolume = sum(Station_Biovolume, na.rm = TRUE), .groups = 'drop') %>%
-  left_join(station_count, by = c('Region', 'MonthYear')) %>%
-  mutate(Mean_Biovolume = Sum_Biovolume / n_stations,
+  summarize(sum_biovol = sum(station_biovol, na.rm = TRUE), .groups = 'drop') %>%
+  left_join(station_count_bio, by = c('Region', 'MonthYear')) %>%
+  mutate(Mean_Biovolume = sum_biovol / n_stations,
          MonthYear = format(MonthYear, '%b-%Y'))
 
 # pivot to wide
@@ -1338,9 +1395,9 @@ station_count_units <- df_pesp %>%
 # average across stations
 df_meanunits <- df_sum2_units %>%
   group_by(Region, MonthYear, AlgalGroup) %>%
-  summarize(Sum_Units = sum(Station_Units, na.rm = TRUE), .groups = 'drop') %>%
+  summarize(sum_units = sum(Station_Units, na.rm = TRUE), .groups = 'drop') %>%
   left_join(station_count_units, by = c('Region', 'MonthYear')) %>%
-  mutate(Mean_Units = Sum_Units / n_stations,
+  mutate(Mean_Units = sum_units / n_stations,
          MonthYear = format(MonthYear, '%b-%Y'))
 
 # pivot to wide
@@ -1353,37 +1410,123 @@ df_meanunits_mo <- df_meanunits %>%
   )
 ```
 
+### Carbon Biomass
+
+```{r}
+# total carbon biomass per station-date-algal group
+df_sum1_cbio <- df_pesp %>%
+  group_by(Region, Station, Date, AlgalGroup) %>%
+  summarize(total_C = sum(C_biomass, na.rm = TRUE), .groups = 'drop')
+
+# average across dates within each station-monthyear
+df_sum2_cbio <- df_sum1_cbio %>%
+  mutate(MonthYear = floor_date(Date, 'month')) %>%
+  group_by(Region, Station, MonthYear, AlgalGroup) %>%
+  summarize(station_C = mean(total_C, na.rm = TRUE), .groups = 'drop')
+
+# count unique stations per region-monthyear
+station_count_c <- df_pesp %>%
+  filter(!is.na(C_biomass)) %>%
+  mutate(MonthYear = floor_date(Date, 'month')) %>%
+  group_by(Region, MonthYear) %>%
+  summarize(n_stations = n_distinct(Station), .groups = 'drop')
+
+# average across stations
+df_meanc <- df_sum2_cbio %>%
+  group_by(Region, MonthYear, AlgalGroup) %>%
+  summarize(sum_C = sum(station_C, na.rm = TRUE), .groups = 'drop') %>%
+  left_join(station_count_c, by = c('Region', 'MonthYear')) %>%
+  mutate(
+    Mean_C = sum_C / n_stations,
+    MonthYear = format(MonthYear, '%b-%Y')
+  )
+
+# pivot to wide
+df_meanc_mo <- df_meanc %>%
+  pivot_wider(
+    id_cols = c(Region, MonthYear),
+    names_from = AlgalGroup,
+    values_from = Mean_C,
+    names_glue = 'cbio_{AlgalGroup}'
+  )
+```
+
 ### Combine
 
 ```{r}
 df_pesp_mo <- df_meanbio_mo %>%
-  full_join(df_meanunits_mo, by = c('Region', 'MonthYear'))
+  full_join(df_meanunits_mo, by = c('Region', 'MonthYear')) %>%
+  full_join(df_meanc_mo, by = c('Region', 'MonthYear'))
 ```
 
 ### Check
 
 ```{r}
 df_pesp_mo %>%
-  summarize(across(everything(), ~sum(!is.na(.)))) %>%
+  summarize(across(everything(), ~ sum(!is.na(.)))) %>%
   pivot_longer(everything(), names_to = 'column', values_to = 'n_non_na') %>%
-  mutate(metric = case_when(
-    str_starts(column, 'bv_') ~ 'biovolume',
-    str_starts(column, 'units_') ~ 'units'
-  ),
-  AlgalGroup = str_remove(column, '^bv_|^units_')) %>%
+  mutate(
+    metric = case_when(
+      str_starts(column, 'bv_') ~ 'biovolume',
+      str_starts(column, 'units_') ~ 'units',
+      str_starts(column, 'cbio_') ~ 'cbiomass'
+    ),
+    AlgalGroup = str_remove(column, '^bv_|^units_|^cbio_')
+  ) %>%
   filter(!is.na(metric)) %>%
   select(AlgalGroup, metric, n_non_na) %>%
   pivot_wider(names_from = metric, values_from = n_non_na)
 ```
 
+```{r remove extra dfs for memory efficiency}
+rm(df_sum1_bio, df_sum2_bio, df_sum1_cbio, df_sum2_cbio, df_sum1_units, df_sum2_units)
+rm(df_meanbio, df_meanbio_mo, df_meanc, df_meanc_mo, df_meanunits, df_meanunits_mo)
+rm(station_count_bio, station_count_c, station_count_units, df_pesp)
+```
+
 ### Clean Data
 
-Remove groups with little data
-
 ```{r}
-df_pesp_mo <- df_pesp_mo %>%
-  select(-matches('Raphidophytes|Ciliates|Coccolithophores|Ochrophytes|Xanthophytes|Eustigmatophytes|Dinoflagellates|Euglenoids|Chrysophytes'))
+# rename other groups as "Other"
+other_groups <- c(
+  'Raphidophytes', 'Ciliates', 'Coccolithophores', 'Ochrophytes',
+  'Xanthophytes', 'Eustigmatophytes', 'Dinoflagellates',
+  'Euglenoids', 'Chrysophytes'
+)
 
+# combine all "Other" groups (sum)
+df_pesp_mo <- df_pesp_mo %>%
+  pivot_longer(
+    -c(Region, MonthYear),
+    names_to = 'name',
+    values_to = 'value'
+  ) %>%
+  mutate(
+    metric = str_extract(name, '^[^_]+'),
+    AlgalGroup = str_remove(name, '^[^_]+_'),
+    AlgalGroup = case_when(
+      AlgalGroup %in% other_groups ~ 'Other',
+      TRUE ~ AlgalGroup
+    )
+  ) %>%
+  group_by(Region, MonthYear, metric, AlgalGroup) %>%
+  summarize(value = sum(value, na.rm = TRUE), .groups = 'drop') %>%
+  pivot_wider(
+    names_from = c(metric, AlgalGroup),
+    values_from = value,
+    names_sep = '_'
+  )
+
+# rounding
+df_pesp_mo <- df_pesp_mo %>%
+  mutate(
+    across(starts_with('bv_'), ~ round(.x, 2)),
+    across(starts_with('units_'), ~ round(.x, 2)),
+    across(starts_with('cbio_'), ~ round(.x, 2))
+  )
+
+# calc seasonal-regional averages using adjusted calendar year (Dec-Nov),
+# with Dec of the previous calendar year included with the following year
 df_pesp_mo <- df_pesp_mo %>%
   mutate(
     date_temp = as.Date(paste0('01-', MonthYear), '%d-%b-%Y'),
@@ -1392,16 +1535,13 @@ df_pesp_mo <- df_pesp_mo %>%
   ) %>%
   select(-c(date_temp, MonthYear))
 
-# Further calculate Seasonal-Regional averages using Adjusted calendar year:
-# December-November, with December of the previous calendar year included with the
-# following year
 df_pesp_seas <- df_pesp_mo %>%
-  mutate(YearAdj = if_else(Month == 12, Year + 1, Year)) |>
+  mutate(YearAdj = if_else(Month == 12, Year + 1, Year)) %>%
   add_season() %>%
   summarize(
     across(
-      starts_with(c("bv_", "units_")),
-      \(x) na_if(mean(x, na.rm = TRUE), NaN)
+      starts_with(c('bv_', 'units_', 'cbio_')),
+      ~ na_if(mean(.x, na.rm = TRUE), NaN)
     ),
     .by = c(YearAdj, Season, Region)
   )
@@ -1468,6 +1608,37 @@ seasonal_values <-
   reduce(left_join)
 ```
 
+```{r remove extra dfs for memory efficiency}
+rm(df_clams_avg_mo, df_clams_avg_seas, df_dayflow_tot_mo, df_dayflow_tot_seas, df_pesp_mo, df_pesp_seas)
+rm(df_veg_index_avg_mo, df_veg_index_avg_seas, df_wind_mo, df_wyt_2010_2024_mo, df_wyt_2010_2024_seas)
+rm(ls_dwq_avg_wide, ls_nutr_avg_wide, df_yr_mo_reg, df_yr_seas_reg)
+```
+
+# Conversions
+
+## Nutrient molarity conversions
+
+```{r}
+monthly_values <- monthly_values %>%
+  mutate(
+    across(
+      c(DissAmmonia, DissNitrateNitrite, DON, TKN),
+      ~ .x / 14.01,
+      .names = '{.col}_mol'
+    ),
+    DissOrthophos_mol = DissOrthophos / 30.97
+  )
+
+seasonal_values <- seasonal_values %>%
+  mutate(
+    across(
+      c(DissAmmonia, DissNitrateNitrite, DON, TKN),
+      ~ .x / 14.01,
+      .names = '{.col}_mol'
+    ),
+    DissOrthophos_mol = DissOrthophos / 30.97
+  )
+```
 
 # Export Processed Data
 
