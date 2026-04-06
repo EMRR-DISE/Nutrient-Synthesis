@@ -94,6 +94,20 @@ ui <- page_navbar(
         "Log-transform Y variable?",
         choices = c("No", "Yes"),
         inline = TRUE
+      ),
+      radioButtons(
+        "ts_facet_opt",
+        "Facet y-axis Range",
+        choices = c("Fixed", "Free"),
+        inline = TRUE
+      ),
+      sliderInput(
+        "ts_year",
+        "Time period displayed",
+        min = min(df_monthly$Year),
+        max = max(df_monthly$Year),
+        value = range(df_monthly$Year),
+        sep = ""
       )
     ),
     conditionalPanel(
@@ -204,17 +218,23 @@ server <- function(input, output, session) {
   output$plot_ts <- renderPlot(
     {
       ts_plt_base <- df_monthly |>
+        dplyr::filter(between(Year, input$ts_year[1], input$ts_year[2])) |>
         ggplot(aes(x = Date)) +
         geom_point(na.rm = TRUE, alpha = 0.6) +
         geom_line(na.rm = TRUE) +
         theme_bw() +
-        facet_grid(rows = vars(Region), scales = "free") +
         scale_x_date(date_breaks = "year", date_labels = "%Y")
 
-      switch(
+      ts_plt_base <- switch(
         input$ts_y_log,
         No = ts_plt_base + aes(y = .data[[input$ts_y]]),
         Yes = ts_plt_base + aes(y = log(.data[[input$ts_y]]))
+      )
+
+      switch(
+        input$ts_facet_opt,
+        Fixed = ts_plt_base + facet_grid(rows = vars(Region)),
+        Free = ts_plt_base + facet_grid(rows = vars(Region), scales = "free")
       )
     },
     res = 96,
