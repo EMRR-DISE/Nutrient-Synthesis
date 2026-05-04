@@ -50,10 +50,11 @@ lookup = read_csv("data/zooplookup.csv")
 
 zoops_grazing = left_join(zoops, lookup) %>%
   filter(!is.na(GrazingRate), !is.na(FunctionalGroup)) %>%
-  mutate(BPUE = CPUE*Biomass_ug, Grazing = CPUE*GrazingRate) %>%
+  mutate(BPUE = CPUE*Biomass_ug, Grazing = CPUE*GrazingRate,#grazing rate is in mL/m3/day
+         Grazing_m3 = Grazing/1000000) %>% #convert mL to cubic meters so i'ts in the same scale
   group_by(SampleID, Latitude, Longitude, Date, Source,
            SizeClass, FunctionalGroup) %>%
-  summarize(BPUE = sum(BPUE, na.rm = T), Grazing = sum(Grazing, na.rm =T))
+  summarize(BPUE = sum(BPUE, na.rm = T), Grazing_m3 = sum(Grazing_m3, na.rm =T))
 
 #now add regions, calculate mean across regions and months
 Regions = st_read("data/spatial/delta_subregions.shp")
@@ -66,13 +67,13 @@ zoops_regions = zoops_grazing %>%
   st_drop_geometry() %>%
   filter(!is.na(Region)) 
 
-#grazing rate is in mL/day
+#grazing rate is in m3/m3/day
 #biomass is in ugC/m3
 
 zoops_monthly = zoops_regions %>%
   mutate(Month = month(Date), Year = year(Date)) %>%
   group_by(Region, Month, Year, FunctionalGroup) %>%
-  summarize(BPUE = mean(BPUE), Grazing = mean(Grazing))
+  summarize(BPUE = mean(BPUE), Grazing_m3 = mean(Grazing_m3))
 
 write_rds(zoops_monthly, "data/processed/zoops_monthly.rds")
 write_csv(zoops_monthly, "data/processed/zoops_monthly.csv")
@@ -87,12 +88,44 @@ zoops_seasonal = zoops_regions %>%
                             Month %in% c(6,7,8) ~ "Summer",
                             Month %in% c(9,10,11) ~ "Fall")) %>%
   group_by(Region, Season, YearAdj, FunctionalGroup) %>%
-  summarize(BPUE = mean(BPUE), Grazing = mean(Grazing))
+  summarize(BPUE = mean(BPUE), Grazing_m3 = mean(Grazing_m3))
 
 write_rds(zoops_seasonal, "data/processed/zoops_seasonal.rds")
 write_csv(zoops_seasonal, "data/processed/zoops_seasonal.csv")
 
 #a few quick plots to check things
 
-ggplot(zoops_monthly, aes(x = Year, y = Grazing, color = FunctionalGroup)) +
+ggplot(zoops_monthly, aes(x = Year, y = Grazing_m3, color = FunctionalGroup)) +
   geom_smooth()+ facet_grid(Month~Region)
+
+ggplot(zoops_monthly, aes(x = Month, y = Grazing_m3, color = FunctionalGroup)) +
+  geom_smooth()+ facet_wrap(~Region) + ylab("Grazing rate (m3/m3/Day")
+
+zoops_monthly = mutate(zoops_monthly, myear = Year + (Month-1)/12)
+
+ggplot(zoops_monthly, aes(x = myear, y = Grazing_m3, color = FunctionalGroup)) +
+  geom_smooth()+ facet_wrap(~Region)
+
+ggplot(zoops_monthly, aes(x = myear, y = BPUE, color = FunctionalGroup)) +
+  geom_smooth()+ facet_wrap(~Region)
+
+ggplot(zoops_monthly, aes(x = myear, y = BPUE, color = Region)) +
+  geom_smooth()+ facet_wrap(~FunctionalGroup)
+
+zoopsreg2 = left_join(zoops, lookup) %>%
+  mutate(BPUE = CPUE*Biomass_ug, Grazing = CPUE*GrazingRate,#grazing rate is in mL/m3/day
+         Grazing_m3 = Grazing/1000000) %>% 
+  filter(!is.na(Latitude), !is.na(Grazing_m3), !is.na(FunctionalGroup)) %>%
+  st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326) %>%
+  st_transform(crs = st_crs(Regions)) %>%
+  st_join(Regions) %>%
+  st_drop_geometry() %>%
+  filter(!is.na(Region)) %>%
+  group_by(Region, Year, Month, Taxname, FunctionalGroup) %>%
+  summarize(BPUE = mean(BPUE), Grazing_m3 = mean(Grazing_m3))
+
+  
+
+ggplot(zoopsreg2, aes(x = Year, y = BPUE, color = Taxname)) +
+  facet_grid(FunctionalGroup~Region, scales = "free_y") + geom_smooth()+
+  scale_color_viridis_d(option = "turbo")
