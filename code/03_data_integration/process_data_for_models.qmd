@@ -38,10 +38,6 @@ library(conflicted)
 conflicts_prefer(dplyr::filter(), hms::hms())
 ```
 
-```{r session info}
-# Run session info to display package versions
-devtools::session_info()
-```
 
 ## Load Functions
 Create functions used in this document:
@@ -481,6 +477,38 @@ df_nutr_avg_seas %>%
   scale_fill_viridis_c(name = "Number of\nSamples") +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+```
+
+## Conversions and Calculations
+
+Nutrient molarity conversions:
+
+```{r}
+monthly_values <- monthly_values %>%
+  mutate(
+    across(
+      c(DissAmmonia, DissNitrateNitrite, DON, TKN),
+      ~ .x / 14.01,
+      .names = '{.col}_mol'
+    ),
+    DissOrthophos_mol = DissOrthophos / 30.97
+  )
+
+seasonal_values <- seasonal_values %>%
+  mutate(
+    across(
+      c(DissAmmonia, DissNitrateNitrite, DON, TKN),
+      ~ .x / 14.01,
+      .names = '{.col}_mol'
+    ),
+    DissOrthophos_mol = DissOrthophos / 30.97
+  )
+```
+
+Nutrient ratio calculations:
+
+```{r}
+
 ```
 
 ```{r}
@@ -1370,7 +1398,7 @@ Goal: Biovolume per Algal Group per Region per Month-Year
 
 ```{r}
 # total biovolume per station-date-algal group(-region)
-df_sum1_bio <- df_pesp %>%
+df_sum1_bio <- df_pesp_c %>%
   group_by(Region, Station, Date, AlgalGroup) %>%
   summarize(
     total_biovol = sum(Biovolume_per_mL, na.rm = TRUE),
@@ -1384,7 +1412,7 @@ df_sum2_bio <- df_sum1_bio %>%
   summarize(station_biovol = mean(total_biovol, na.rm = TRUE), .groups = 'drop')
 
 # count unique stations per region-monthyear
-station_count_bio <- df_pesp %>%
+station_count_bio <- df_pesp_c %>%
   filter(!is.na(Biovolume_per_mL)) %>%
   mutate(MonthYear = floor_date(Date, 'month')) %>%
   group_by(Region, MonthYear) %>%
@@ -1417,7 +1445,7 @@ df_meanbio_mo <- df_meanbio %>%
 
 ```{r}
 # total units per station-date-algal group
-df_sum1_units <- df_pesp %>%
+df_sum1_units <- df_pesp_c %>%
   group_by(Region, Station, Date, AlgalGroup) %>%
   summarize(Total_Units = sum(Units_per_mL, na.rm = TRUE), .groups = 'drop')
 
@@ -1428,7 +1456,7 @@ df_sum2_units <- df_sum1_units %>%
   summarize(Station_Units = mean(Total_Units, na.rm = TRUE), .groups = 'drop')
 
 # count unique stations per region-monthyear
-station_count_units <- df_pesp %>%
+station_count_units <- df_pesp_c %>%
   filter(!is.na(Units_per_mL)) %>%
   mutate(MonthYear = floor_date(Date, 'month')) %>%
   group_by(Region, MonthYear) %>%
@@ -1458,7 +1486,7 @@ df_meanunits_mo <- df_meanunits %>%
 
 ```{r}
 # total carbon biomass per station-date-algal group
-df_sum1_cbio <- df_pesp %>%
+df_sum1_cbio <- df_pesp_c %>%
   group_by(Region, Station, Date, AlgalGroup) %>%
   summarize(total_C = sum(C_biomass, na.rm = TRUE), .groups = 'drop')
 
@@ -1469,7 +1497,7 @@ df_sum2_cbio <- df_sum1_cbio %>%
   summarize(station_C = mean(total_C, na.rm = TRUE), .groups = 'drop')
 
 # count unique stations per region-monthyear
-station_count_c <- df_pesp %>%
+station_count_c <- df_pesp_c %>%
   filter(!is.na(C_biomass)) %>%
   mutate(MonthYear = floor_date(Date, 'month')) %>%
   group_by(Region, MonthYear) %>%
@@ -1506,7 +1534,7 @@ df_pesp_mo <- df_meanbio_mo %>%
 ### Check
 
 ```{r}
-df_pesp_mo %>%
+df_pesp_mo2a %>%
   summarize(across(everything(), ~ sum(!is.na(.)))) %>%
   pivot_longer(everything(), names_to = 'column', values_to = 'n_non_na') %>%
   mutate(
@@ -1695,31 +1723,6 @@ rm(
 )
 ```
 
-# Conversions
-
-## Nutrient molarity conversions
-
-```{r}
-monthly_values <- monthly_values %>%
-  mutate(
-    across(
-      c(DissAmmonia, DissNitrateNitrite, DON, TKN),
-      ~ .x / 14.01,
-      .names = '{.col}_mol'
-    ),
-    DissOrthophos_mol = DissOrthophos / 30.97
-  )
-
-seasonal_values <- seasonal_values %>%
-  mutate(
-    across(
-      c(DissAmmonia, DissNitrateNitrite, DON, TKN),
-      ~ .x / 14.01,
-      .names = '{.col}_mol'
-    ),
-    DissOrthophos_mol = DissOrthophos / 30.97
-  )
-```
 
 # Export Processed Data
 

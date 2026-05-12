@@ -16,7 +16,7 @@ df_monthly <-
   read_rds(here("data/processed/monthly_values.rds")) |>
   mutate(
     Season = factor(
-      case_match(
+      recode_values(
         Month,
         3:5 ~ "Spring",
         6:8 ~ "Summer",
