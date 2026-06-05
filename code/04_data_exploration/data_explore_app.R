@@ -40,7 +40,7 @@ df_monthly <-
   )
 
 plot_vars <- df_monthly |>
-  select(where(is.numeric) & !all_of(c("Year", "DissNitrate"))) |>
+  select(where(is.numeric) & !Year) |>
   names()
 
 plot_vars_box <- str_subset(plot_vars, "_(Inflow|Index)$", negate = TRUE)
