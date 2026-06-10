@@ -8,6 +8,7 @@ library(lubridate)
 library(dplyr)
 library(ggplot2)
 library(stringr)
+library(tidyr)
 library(shiny)
 library(bslib)
 library(here)
@@ -155,6 +156,7 @@ server <- function(input, output, session) {
   output$plot_xy <- renderPlot(
     {
       xy_plt_base <- df_monthly |>
+        drop_na(all_of(c(input$scatt_x, input$scatt_y))) |>
         ggplot(aes(color = Region)) +
         geom_point(na.rm = TRUE, alpha = 0.7) +
         theme_bw()
@@ -218,6 +220,7 @@ server <- function(input, output, session) {
   output$plot_ts <- renderPlot(
     {
       ts_plt_base <- df_monthly |>
+        drop_na(all_of(input$ts_y)) |>
         dplyr::filter(between(Year, input$ts_year[1], input$ts_year[2])) |>
         ggplot(aes(x = Date)) +
         geom_point(na.rm = TRUE, alpha = 0.6) +
@@ -245,6 +248,7 @@ server <- function(input, output, session) {
   output$plot_box <- renderPlot(
     {
       boxplt_base <- df_monthly |>
+        drop_na(all_of(input$box_y)) |>
         ggplot() +
         geom_boxplot(na.rm = TRUE) +
         theme_bw()
