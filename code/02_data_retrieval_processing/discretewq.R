@@ -72,8 +72,12 @@ get_discretewq <- function() {
     "pH",
     "TurbidityNTU",
     "TurbidityFNU",
-    "Chlorophyll"
+    "Chlorophyll",
+    "DissSilica"
   )
+
+  # Define sign variables to keep from discretewq
+  dwq_sign <- c("Chlorophyll_Sign", "DissSilica_Sign")
 
   # Prepare data for aggregation
   df_dwq_c1 <- df_dwq |>
@@ -86,8 +90,7 @@ get_discretewq <- function() {
       Datetime,
       Year,
       Month,
-      tidyselect::all_of(dwq_param),
-      Chlorophyll_Sign
+      tidyselect::all_of(c(dwq_param, dwq_sign))
     ) |>
     # Convert Datetime to PST
     dplyr::mutate(

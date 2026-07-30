@@ -79,7 +79,7 @@ df_dwq <- get_discretewq()
 
 # Prepare data before averaging
 df_dwq_c <- df_dwq %>%
-  # Replace Chlorophyll values below the reporting limit with simulated values
+  # Replace Chlorophyll and DissSilica values below the reporting limit with simulated values
   replace_blw_rl() |>
   # Convert pH values to H+ concentration before averaging
   mutate(Result = replace_when(Result, Parameter == "pH" ~ 10^-Result)) |>
@@ -234,6 +234,7 @@ aggr_vars <- c(
   "DissolvedOxygen",
   "Chlorophyll",
   "pH",
+  "DissSilica",
   "MVI",
   "Clam_Filtration",
   "Clam_Turnover",

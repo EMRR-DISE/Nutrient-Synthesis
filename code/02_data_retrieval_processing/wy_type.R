@@ -13,7 +13,7 @@ get_wy_type <- function() {
   # Find element for WY type table
   wyt_tbl_element <- rvest::html_element(
     wyt_session,
-    xpath = '//*[@id="main-content"]/div/div[2]/main/section/pre/text()'
+    xpath = '//*[@id="main-content"]/div/div/main/section/pre/text()'
   )
 
   # Extract and clean text for WY type table
