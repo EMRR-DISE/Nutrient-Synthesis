@@ -48,6 +48,7 @@ plot_vars_box <- str_subset(plot_vars, "_(Inflow|Index)$", negate = TRUE)
 
 ui <- page_navbar(
   title = "Nutrient Synthesis Data Explorer",
+  shinyjs::useShinyjs(),
   id = "nav",
   sidebar = sidebar(
     title = "Plot Controls",
@@ -80,11 +81,41 @@ ui <- page_navbar(
         ),
         selected = "region"
       ),
-      radioButtons(
-        "scatt_trendline",
-        "Add a linear trend-line?",
-        choices = c("No", "Yes"),
-        inline = TRUE
+      div(
+        radioButtons(
+          "scatt_trendline",
+          "Trend-line Options",
+          choices = c(
+            "None" = "none",
+            "Linear Model" = "lm",
+            "Quantile Regression" = "quant"
+          ),
+          selected = "none"
+        ),
+        div(
+          style = "padding-left: 29px; margin-top: -14px; margin-bottom: 15px;",
+          numericInput(
+            "scatt_trendline_quant",
+            "Quantile",
+            value = NA,
+            min = 0.05,
+            max = 0.95,
+            step = 0.05,
+            width = "120px"
+          )
+        ),
+        # Custom CSS to tweak the height & line-height of the input box
+        tags$head(
+          tags$style(HTML(
+            "
+              #scatt_trendline_quant {
+                height: 38px !important;
+                padding: 6px 12px !important;
+                font-size: 14px !important;
+              }
+            "
+          ))
+        )
       )
     ),
     conditionalPanel(
@@ -153,6 +184,17 @@ ui <- page_navbar(
 )
 
 server <- function(input, output, session) {
+  observe({
+    if (identical(input$scatt_trendline, "quant")) {
+      shinyjs::enable("scatt_trendline_quant")
+      updateNumericInput(session, "scatt_trendline_quant", value = 0.9)
+    } else {
+      shinyjs::disable("scatt_trendline_quant")
+      updateNumericInput(session, "scatt_trendline_quant", value = NA)
+    }
+  }) |>
+    bindEvent(input$scatt_trendline)
+
   output$plot_xy <- renderPlot(
     {
       xy_plt_base <- df_monthly |>
@@ -175,9 +217,16 @@ server <- function(input, output, session) {
 
       xy_plt_base <- switch(
         input$scatt_trendline,
-        No = xy_plt_base,
-        Yes = xy_plt_base +
-          geom_smooth(na.rm = TRUE, method = "lm", formula = "y ~ x")
+        none = xy_plt_base,
+        lm = xy_plt_base +
+          geom_smooth(na.rm = TRUE, method = "lm", formula = "y ~ x"),
+        quant = xy_plt_base +
+          geom_quantile(
+            na.rm = TRUE,
+            formula = "y ~ x",
+            quantiles = input$scatt_trendline_quant,
+            linewidth = 1
+          )
       )
 
       switch(
