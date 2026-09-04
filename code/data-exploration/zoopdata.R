@@ -98,7 +98,7 @@ write_csv(zoops_seasonal, "data/processed/zoops_seasonal.csv")
 ggplot(zoops_monthly, aes(x = Year, y = Grazing_m3, color = FunctionalGroup)) +
   geom_smooth()+ facet_grid(Month~Region)
 
-ggplot(zoops_monthly, aes(x = Month, y = Grazing_m3, color = FunctionalGroup)) +
+ggplot(zoops_monthly, aes(x = Month,y = Grazing_m3, color = FunctionalGroup)) +
   geom_smooth()+ facet_wrap(~Region) + ylab("Grazing rate (m3/m3/Day")
 
 zoops_monthly = mutate(zoops_monthly, myear = Year + (Month-1)/12)
@@ -108,6 +108,10 @@ ggplot(zoops_monthly, aes(x = myear, y = Grazing_m3, color = FunctionalGroup)) +
 
 ggplot(zoops_monthly, aes(x = myear, y = BPUE, color = FunctionalGroup)) +
   geom_smooth()+ facet_wrap(~Region)
+
+ggplot(zoops_monthly, aes(x = myear, y = BPUE, color = FunctionalGroup)) +
+  geom_point()+ geom_smooth()+ facet_wrap(~Region)
+
 
 ggplot(zoops_monthly, aes(x = myear, y = BPUE, color = Region)) +
   geom_smooth()+ facet_wrap(~FunctionalGroup)
