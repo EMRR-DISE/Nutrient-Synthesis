@@ -38,10 +38,6 @@ library(conflicted)
 conflicts_prefer(dplyr::filter(), hms::hms())
 ```
 
-```{r session info}
-# Run session info to display package versions
-devtools::session_info()
-```
 
 ## Load Functions
 Create functions used in this document:
@@ -107,7 +103,7 @@ replace_blw_rl <- function(df, min_val = 0, seed = 1) {
 add_season <- function(df) {
   df %>%
     mutate(
-      Season = case_match(
+      Season = recode_values(
         Month,
         3:5 ~ "Spring",
         6:8 ~ "Summer",
@@ -267,7 +263,7 @@ df_nutr_c5 <- df_nutr_c4 %>%
   # Omit <RL values with reporting limits that are greater than the 95th percentile
   # of the values for the parameter
   mutate(q95 = quantile(Result, probs = 0.95), .by = Analyte) %>%
-  filter(!(Sign == "<" & Result > q95)) %>%
+  filter_out(Sign == "<", Result > q95) %>%
   select(-q95) %>%
   replace_blw_rl()
 ```
@@ -329,7 +325,7 @@ ls_nutr_avg_wide <- lst(df_nutr_avg_mo, df_nutr_avg_seas) %>%
     \(x) {
       mutate(
         x,
-        Analyte = case_match(
+        Analyte = recode_values(
           Analyte,
           "Dissolved Ammonia" ~ "DissAmmonia",
           "Dissolved Nitrate" ~ "DissNitrate",
@@ -403,7 +399,6 @@ ls_nutr_avg_biweekly_plt <- df_nutr_avg_biweekly %>%
 #| results: asis
 #| fig-width: 8
 #| fig-height: 8
-
 for (i in 1:length(ls_nutr_avg_biweekly_plt)) {
   # Create subheadings for each Parameter
   cat("#### ", names(ls_nutr_avg_biweekly_plt[i]), "\n\n")
@@ -451,7 +446,6 @@ ls_nutr_avg_mo_plt <- df_nutr_avg_mo %>%
 #| results: asis
 #| fig-width: 8
 #| fig-height: 6
-
 for (i in 1:length(ls_nutr_avg_mo_plt)) {
   # Create subheadings for each Parameter
   cat("#### ", names(ls_nutr_avg_mo_plt[i]), "\n\n")
@@ -468,7 +462,6 @@ for (i in 1:length(ls_nutr_avg_mo_plt)) {
 ```{r dwr nutr samp effort seasonal values}
 #| fig-width: 8
 #| fig-height: 9
-
 df_nutr_avg_seas %>%
   ggplot(aes(x = YearAdj, y = Region, fill = Num_samples)) +
   geom_tile() +
@@ -484,6 +477,38 @@ df_nutr_avg_seas %>%
   scale_fill_viridis_c(name = "Number of\nSamples") +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+```
+
+## Conversions and Calculations
+
+Nutrient molarity conversions:
+
+```{r}
+monthly_values <- monthly_values %>%
+  mutate(
+    across(
+      c(DissAmmonia, DissNitrateNitrite, DON, TKN),
+      ~ .x / 14.01,
+      .names = '{.col}_mol'
+    ),
+    DissOrthophos_mol = DissOrthophos / 30.97
+  )
+
+seasonal_values <- seasonal_values %>%
+  mutate(
+    across(
+      c(DissAmmonia, DissNitrateNitrite, DON, TKN),
+      ~ .x / 14.01,
+      .names = '{.col}_mol'
+    ),
+    DissOrthophos_mol = DissOrthophos / 30.97
+  )
+```
+
+Nutrient ratio calculations:
+
+```{r}
+
 ```
 
 ```{r}
@@ -532,7 +557,7 @@ df_dwq_c1 <- df_dwq %>%
   # Convert Datetime to PST
   mutate(Datetime = with_tz(Datetime, tzone = "Etc/GMT+8")) %>%
   # Remove rows where all parameters are NA
-  filter(!if_all(all_of(dwq_param), is.na)) %>%
+  filter_out(if_all(all_of(dwq_param), is.na)) %>%
   # Remove records without lat-long coordinates
   drop_na(Latitude, Longitude) %>%
   # Assign SubRegions to the stations
@@ -544,7 +569,7 @@ df_dwq_c1 <- df_dwq %>%
   st_drop_geometry() %>%
   # Only keep the stations located in Suisun, Montezuma, and Nurse Sloughs from the
   # Suisun Marsh survey
-  filter(!(Source == "Suisun" & !str_detect(Station, "^SU|^MZ|^NS")))
+  filter_out(Source == "Suisun", !str_detect(Station, "^SU|^MZ|^NS"))
 
 # Pivot the parameter columns to long data structure
 df_dwq_c2 <- df_dwq_c1 %>%
@@ -559,7 +584,7 @@ df_dwq_c2 <- df_dwq_c1 %>%
   drop_na(Result) %>%
   replace_na(list(Sign = "=")) |>
   # Rename Microcystis to MVI
-  mutate(Parameter = if_else(Parameter == "Microcystis", "MVI", Parameter))
+  mutate(Parameter = replace_values(Parameter, "Microcystis" ~ "MVI"))
 ```
 
 Consolidate Turbidity parameters and prefer TurbidityNTU when both NTU and FNU were collected.
@@ -640,22 +665,22 @@ Remove values that are out of range of reasonable limits for the parameter. Also
 ```{r discretewq rm outliers}
 df_dwq_c7 <- df_dwq_c6 %>%
   # Temperature value of 2.9 collected on 8/12/2014 in Suisun Marsh
-  filter(!(Parameter == "Temperature" & Result < 3)) %>%
+  filter_out(Parameter == "Temperature", Result < 3) %>%
   # Temperature value of 116 collected on 3/23/2017 at USGS-11447650
-  filter(!(Parameter == "Temperature" & Result > 35)) %>%
+  filter_out(Parameter == "Temperature", Result > 35) %>%
   # DO values greater than 20 (these are obviously % Saturation)
-  filter(!(Parameter == "DissolvedOxygen" & Result > 20)) %>%
+  filter_out(Parameter == "DissolvedOxygen", Result > 20) %>%
   # pH value of 2.56 collected on 7/2/2014 in the Yolo Bypass
-  filter(!(Parameter == "pH" & Result < 3)) %>%
+  filter_out(Parameter == "pH", Result < 3) %>%
   # Two Turbidity values greater than 1000 collected in early Sept 2017 in the South
   # Delta
-  filter(!(Parameter == "Turbidity" & Result > 1000)) %>%
+  filter_out(Parameter == "Turbidity", Result > 1000) %>%
   # A few Chlorophyll values less than or equal to zero
-  filter(!(Parameter == "Chlorophyll" & Result <= 0)) |>
+  filter_out(Parameter == "Chlorophyll", Result <= 0) |>
   # Replace Chlorophyll values below the reporting limit with simulated values
   replace_blw_rl() |>
   # Convert pH values to H+ concentration before averaging
-  mutate(Result = if_else(Parameter == "pH", 10^-Result, Result))
+  mutate(Result = replace_when(Result, Parameter == "pH" ~ 10^-Result))
 ```
 
 ## Aggregate Data
@@ -779,7 +804,6 @@ ls_dwq_avg_biweekly_plt <- df_dwq_avg_biweekly %>%
 #| results: asis
 #| fig-width: 8
 #| fig-height: 8
-
 for (i in 1:length(ls_dwq_avg_biweekly_plt)) {
   # Create subheadings for each Parameter
   cat("#### ", names(ls_dwq_avg_biweekly_plt[i]), "\n\n")
@@ -828,7 +852,6 @@ ls_dwq_avg_mo_plt <- df_dwq_avg_mo %>%
 #| results: asis
 #| fig-width: 8
 #| fig-height: 6
-
 for (i in 1:length(ls_dwq_avg_mo_plt)) {
   # Create subheadings for each Parameter
   cat("#### ", names(ls_dwq_avg_mo_plt[i]), "\n\n")
@@ -845,7 +868,6 @@ for (i in 1:length(ls_dwq_avg_mo_plt)) {
 ```{r discretewq samp effort seasonal values}
 #| fig-width: 8
 #| fig-height: 9
-
 df_dwq_avg_seas %>%
   filter(YearAdj %in% 2010:2024) %>%
   ggplot(aes(x = YearAdj, y = Region, fill = Num_samples)) +
@@ -1191,7 +1213,7 @@ df_veg_index_c <- df_veg_index %>%
     across(
       starts_with("VegIndex"),
       \(x) {
-        case_match(
+        recode_values(
           x,
           "Not Visible" ~ 0,
           "Low" ~ 1,
@@ -1283,7 +1305,7 @@ ndf_wind_mo <- tibble(
 ```{r wind prepare data}
 df_wind_mo <- ndf_wind_mo %>%
   mutate(
-    Region = case_match(
+    Region = recode_values(
       Region,
       "Conf" ~ "Confluence",
       "Nort" ~ "North",
@@ -1335,7 +1357,7 @@ df_pesp <- readRDS(here("data/external/pesp_2013_2024.rds"))
 
 # assign subregions
 df_pesp <- df_pesp %>%
-  filter(!is.na(Latitude) | !is.na(Longitude)) %>%
+  filter_out(when_any(is.na(Latitude), is.na(Longitude))) %>%
   st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326) %>%
   st_transform(crs = st_crs(sf_delta)) %>%
   st_join(sf_delta, join = st_intersects) %>%
@@ -1376,7 +1398,7 @@ Goal: Biovolume per Algal Group per Region per Month-Year
 
 ```{r}
 # total biovolume per station-date-algal group(-region)
-df_sum1_bio <- df_pesp %>%
+df_sum1_bio <- df_pesp_c %>%
   group_by(Region, Station, Date, AlgalGroup) %>%
   summarize(
     total_biovol = sum(Biovolume_per_mL, na.rm = TRUE),
@@ -1390,7 +1412,7 @@ df_sum2_bio <- df_sum1_bio %>%
   summarize(station_biovol = mean(total_biovol, na.rm = TRUE), .groups = 'drop')
 
 # count unique stations per region-monthyear
-station_count_bio <- df_pesp %>%
+station_count_bio <- df_pesp_c %>%
   filter(!is.na(Biovolume_per_mL)) %>%
   mutate(MonthYear = floor_date(Date, 'month')) %>%
   group_by(Region, MonthYear) %>%
@@ -1423,7 +1445,7 @@ df_meanbio_mo <- df_meanbio %>%
 
 ```{r}
 # total units per station-date-algal group
-df_sum1_units <- df_pesp %>%
+df_sum1_units <- df_pesp_c %>%
   group_by(Region, Station, Date, AlgalGroup) %>%
   summarize(Total_Units = sum(Units_per_mL, na.rm = TRUE), .groups = 'drop')
 
@@ -1434,7 +1456,7 @@ df_sum2_units <- df_sum1_units %>%
   summarize(Station_Units = mean(Total_Units, na.rm = TRUE), .groups = 'drop')
 
 # count unique stations per region-monthyear
-station_count_units <- df_pesp %>%
+station_count_units <- df_pesp_c %>%
   filter(!is.na(Units_per_mL)) %>%
   mutate(MonthYear = floor_date(Date, 'month')) %>%
   group_by(Region, MonthYear) %>%
@@ -1464,7 +1486,7 @@ df_meanunits_mo <- df_meanunits %>%
 
 ```{r}
 # total carbon biomass per station-date-algal group
-df_sum1_cbio <- df_pesp %>%
+df_sum1_cbio <- df_pesp_c %>%
   group_by(Region, Station, Date, AlgalGroup) %>%
   summarize(total_C = sum(C_biomass, na.rm = TRUE), .groups = 'drop')
 
@@ -1475,7 +1497,7 @@ df_sum2_cbio <- df_sum1_cbio %>%
   summarize(station_C = mean(total_C, na.rm = TRUE), .groups = 'drop')
 
 # count unique stations per region-monthyear
-station_count_c <- df_pesp %>%
+station_count_c <- df_pesp_c %>%
   filter(!is.na(C_biomass)) %>%
   mutate(MonthYear = floor_date(Date, 'month')) %>%
   group_by(Region, MonthYear) %>%
@@ -1512,7 +1534,7 @@ df_pesp_mo <- df_meanbio_mo %>%
 ### Check
 
 ```{r}
-df_pesp_mo %>%
+df_pesp_mo2a %>%
   summarize(across(everything(), ~ sum(!is.na(.)))) %>%
   pivot_longer(everything(), names_to = 'column', values_to = 'n_non_na') %>%
   mutate(
@@ -1576,9 +1598,9 @@ df_pesp_mo <- df_pesp_mo %>%
   mutate(
     metric = str_extract(name, '^[^_]+'),
     AlgalGroup = str_remove(name, '^[^_]+_'),
-    AlgalGroup = case_when(
-      AlgalGroup %in% other_groups ~ 'Other',
-      TRUE ~ AlgalGroup
+    AlgalGroup = replace_when(
+      AlgalGroup,
+      AlgalGroup %in% other_groups ~ 'Other'
     )
   ) %>%
   group_by(Region, MonthYear, metric, AlgalGroup) %>%
@@ -1631,7 +1653,7 @@ df_yr_mo_reg <-
     Region = sort(unique(sf_delta$Region))
   ) %>%
   # Remove rows after June 2024
-  filter(!(Year == 2024 & Month > 6)) %>%
+  filter_out(Year == 2024, Month > 6) %>%
   # Create Month-Year column
   mutate(
     MonthYear = paste(month(Month, label = TRUE), Year, sep = "-"),
@@ -1662,7 +1684,7 @@ df_yr_seas_reg <- df_yr_mo_reg %>%
   add_season() %>%
   distinct(YearAdj = Year, Season, Region) %>%
   # Remove Summer 2024 because of low sampling
-  filter(!(YearAdj == 2024 & Season == "Summer"))
+  filter_out(YearAdj == 2024, Season == "Summer")
 
 # Combine all Seasonal-Regional averages, seasonal totals, or annual values into one
 # data frame
@@ -1701,31 +1723,6 @@ rm(
 )
 ```
 
-# Conversions
-
-## Nutrient molarity conversions
-
-```{r}
-monthly_values <- monthly_values %>%
-  mutate(
-    across(
-      c(DissAmmonia, DissNitrateNitrite, DON, TKN),
-      ~ .x / 14.01,
-      .names = '{.col}_mol'
-    ),
-    DissOrthophos_mol = DissOrthophos / 30.97
-  )
-
-seasonal_values <- seasonal_values %>%
-  mutate(
-    across(
-      c(DissAmmonia, DissNitrateNitrite, DON, TKN),
-      ~ .x / 14.01,
-      .names = '{.col}_mol'
-    ),
-    DissOrthophos_mol = DissOrthophos / 30.97
-  )
-```
 
 # Export Processed Data
 
