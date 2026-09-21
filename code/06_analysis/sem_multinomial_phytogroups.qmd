@@ -1,0 +1,1109 @@
+---
+title: "SEM Template"
+author: "Perry"
+date: today
+date-format: long
+format:
+  html:
+    toc: true
+    code-fold: show
+    code-tools: true
+    df-print: kable
+execute:
+  message: false
+  warning: false
+---
+
+# Analysis Example
+
+I'm updating Perry's SEM templat code to try and create a multinomial model based on which algal group is dominant
+
+My models will be:
+
+$$
+\text{AlgalGroup} \sim \text{log(DissAmmonia)} + \text{...} + \text{RE(Region)}
+$$
+
+$$
+\text{log(DissAmmonia)} \sim \text{...} + \text{RE(Region)}
+$$
+
+I used the monthly nutrient data for this.
+
+```{r}
+library(tidyverse)
+library(emmeans)
+library(car)
+library(see)
+library(lme4)
+library(lmerTest)
+library(performance)
+library(piecewiseSEM)
+library(lavaan)
+library(semPlot)
+
+library(mgcv)
+library(here)
+library(conflicted)
+theme_set(theme_bw())
+options(contrasts = c('contr.sum', 'contr.poly'))
+
+# Declare package conflict preferences
+conflicts_prefer(dplyr::filter(), dplyr::lag(), lme4::lmer())
+```
+
+```{r}
+# Define WQ parameters included in this version
+wq_param <- c(
+  "DissAmmonia",
+  "DissNitrateNitrite",
+  "DissOrthophos",
+  "DissSilica",
+  "DON",
+  "TKN",
+  "TotPhos",
+  "Temperature",
+  "Salinity",
+  "Turbidity",
+  "DissolvedOxygen",
+  "Chlorophyll",
+  "pH",
+  "MVI",
+  "Sac_Inflow",
+  "SJR_Inflow",
+  "Total_Inflow",
+  "Clam_Turnover",
+  "bv_Green Algae",
+  "bv_Cyanobacteria",
+   "bv_Centric Diatoms",
+  "bv_Pennate Diatoms",
+  "bv_Cryptophytes"
+)
+
+df_monthly <- readRDS(here("data/processed/monthly_values.rds")) %>%
+  mutate(Region = factor(Region), Date = make_date(Year, Month, 1)) %>%
+  select(MonthYear, Year, Month, Date, Region, all_of(wq_param)) %>%
+  arrange(Region, Date)
+
+df_monthly_long <- df_monthly %>%
+  pivot_longer(
+    cols = all_of(wq_param),
+    names_to = "Variable",
+    values_to = "Value"
+  )
+```
+
+# Exploratory Analysis (Data)
+
+First we investigate our individual variables.
+
+## Balance check
+
+When you have categorical variables (like Region), it's best to have balanced data -- the same number per category.
+
+How many samples do we have per Region?
+
+```{r}
+df_monthly %>%
+  count(Region)
+```
+
+Basically even, but how many are non-NAs for relevant variables?
+
+```{r}
+df_monthly_long %>%
+  drop_na(Value) %>%
+  count(Region, Variable) %>%
+  pivot_wider(names_from = Region, values_from = n, values_fill = 0)
+```
+
+There are missing values for certain analytes. To group them:
+
+**balanced:** Temperature, Salinity, Turbidity, DissolvedOxygen, Inflows
+
+**relatively balanced (\>= 75%):** Chlorophyll, pH, MVI
+
+**missing data (Suisun Marsh, North Delta):** DissAmmonia, DissNitrateNitrite, DissOrthophos, DON, TKN, TotPhos, ClamTurnover
+
+
+We can break this down by month to see if the missing data is interpolable or not:
+
+```{r}
+df_missing <- df_monthly_long %>%
+  mutate(
+    Missing = factor(
+      if_else(is.na(Value), 1, 0),
+      levels = c(0, 1),
+      labels = c('Present', 'Missing')
+    )
+  )
+
+plots <- df_missing %>%
+  group_by(Variable) %>%
+  group_split() %>%
+  lapply(function(df) {
+    ggplot(df, aes(x = Date, y = Region, fill = Missing)) +
+      geom_tile(color = 'grey20', linewidth = 0.3, width = 35) +
+      scale_fill_manual(
+        values = c('Present' = 'lightblue', 'Missing' = 'white')
+      ) +
+      scale_x_date(
+        name = "Month",
+        date_breaks = '1 year',
+        date_labels = '%Y',
+        expand = expansion(mult = 0)
+      ) +
+      scale_y_discrete(expand = expansion(add = 0)) +
+      theme_bw() +
+      labs(
+        title = paste0('Missing Data: ', unique(df$Variable)),
+        fill = 'P/A'
+      ) +
+      theme(
+        axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
+        legend.position = "top",
+        panel.grid = element_blank()
+      )
+  })
+
+walk(plots, print)
+```
+
+Findings:
+
+**No data until 02-2017 (for Suisun Marsh):** DON, DissAmmonia, DissNitrateNitrite, DissOrthophos, TKN, TotPhos
+
+-   rest of missing data is interpolable
+
+
+**Large gaps until 06-2015:** MVI
+
+-   all 5 month gaps between Jan-May
+
+**Missing after 01-2023 for Suisun Marsh/Suisun Bay:** pH
+
+**Small interpolable gaps:** Chlorophyll
+
+**No gaps:** Temperature, Salinity, Turbidity, DissolvedOxygen, Inflows
+
+### Discussion
+
+A few analytes can be used for the entire 01-2010 through 06-2024 time range:
+
+-   **Fully ready:** Temperature, Salinity, Turbidity, DissolvedOxygen, Inflows
+
+-   **Possibly needs minor interpolation:** Chlorophyll
+
+A few could be used for the entire range (with minor interpolation) for all regions except Suisun Marsh. The options are:
+
+-   cut the analysis range to begin on 02-2017
+
+-   remove Suisun Marsh from primary analyses, keep full range
+
+    -   could run separately on narrower time frame
+
+-   analyze with full dataset, interpret with unbalanced design in mind
+
+pH is missing data after 01-2023 for two regions; this feels like an error to me, so we might want to double check the original data. If not, the options are similar to above:
+
+-   cut the analysis range to end at 01-2023
+
+-   remove Suisun Marsh/Suisun Bay from primary analyses
+
+-   analyze with full dataset, interpret with unbalanced design in mind
+
+MVI has multiple data gaps and some large, non-interpolable gaps. Options are similar to above. We also have chlorophyll data as a response variable to ground truth our results if analyses look off with MVI.
+
+DissNitrate is missing large amounts of data and should be excluded.
+
+## Visualize distributions
+
+
+
+```{r}
+
+df_dominant =df_monthly %>%
+  pivot_longer(
+    cols = `bv_Green Algae`:bv_Cryptophytes,
+    names_to = 'AlgalGroup',
+    values_to = 'Value'
+  ) %>%
+  filter(!is.na(Value)) %>%
+  group_by(MonthYear, Region) %>%
+  mutate(Dominant = AlgalGroup[which(Value == max(Value))]) %>%
+  ungroup() %>%
+  select(-AlgalGroup, -Value) %>%
+distinct() %>%
+  mutate(Dominant = str_remove(Dominant, "bv_"))
+
+df_plt <- df_monthly %>%
+  pivot_longer(
+    cols = DissAmmonia:last_col(),
+    names_to = 'Analyte',
+    values_to = 'Value'
+  )
+
+ggplot(df_plt, aes(x = Value)) +
+  geom_histogram(
+    color = 'black',
+    fill = 'lightgray'
+  ) +
+  facet_wrap(~Analyte, scales = 'free')
+```
+
+They're pretty much all right-skewed to various degrees, except for Temperature (which almost appears bivariate) and pH, which is slightly left skewed. A few graphs, such as chlorophyll and pH, indicate outliers exist.
+
+Chlorophyll and biovolume are more Poisson distributed.
+
+## Visualize time series
+
+If your data has a time component, it's also useful to look at a time series of the analytes.
+
+```{r}
+# no points
+for (a in unique(df_plt$Analyte)) {
+  p <- df_plt %>%
+    filter(Analyte == a) %>%
+    ggplot(aes(x = Date, y = Value)) +
+    geom_line(color = 'gray50', linewidth = 0.8, na.rm = TRUE) +
+    facet_wrap(~Region, scales = 'free_y', ncol = 2) +
+    labs(title = a)
+
+  print(p)
+}
+```
+
+
+These are especially useful for identifying seasonal patterns within the data.
+
+## Visualize outliers
+
+Next, I like to note extreme outliers. Even if they're real data, they can negatively influence regressions either by influencing the coefficients or inflating the error.
+
+If later on (eg. after model diagnostics) I decide to remove any of these, this is where I'd do it.
+
+```{r}
+df_plt <- df_plt %>%
+  group_by(Analyte) %>%
+  mutate(
+    Q1  = quantile(Value, 0.25, na.rm = TRUE),
+    Q3  = quantile(Value, 0.75, na.rm = TRUE),
+    IQR = Q3 - Q1,
+    is_outlier = Value < (Q1 - 1.5 * IQR) | Value > (Q3 + 1.5 * IQR)
+  ) %>%
+  ungroup()
+
+ggplot(df_plt, aes(x = 1, y = Value)) +
+  geom_jitter(
+    aes(color = ifelse(is_outlier, 'Outlier', 'Normal')),
+    shape = 21,
+    width = 0.1,
+    na.rm = TRUE
+  ) +
+  scale_color_manual(
+    values = c('Normal' = 'lightgray', 'Outlier' = 'red')
+  ) +
+  geom_boxplot(
+    outlier.shape = NA,
+    na.rm = TRUE
+  ) +
+  facet_wrap(~Analyte, scales = 'free_y') +
+  theme(legend.position = 'none')
+
+```
+
+There's a few outliers, though none I would remove outright. However, further on I decided I wanted to remove a few extreme DissAmmonia, pH, Chlorophyll, and DissOrthophos values (7 total), which I'll do here:
+
+```{r}
+df_dominantsub <- df_dominant %>%
+  filter(!(DissAmmonia > 0.4 | pH < 6.5 | Chlorophyll > 35 | DissOrthophos < 0.01) |
+           is.na(DissAmmonia) |
+           is.na(pH) |
+           is.na(Chlorophyll) |
+           is.na(DissOrthophos))
+
+
+```
+
+Some plots by dominant taxon
+
+```{r}
+ggplot(df_dominantsub, aes(x = Dominant, y = DissAmmonia))+ geom_boxplot()+xlab("Dominant Algal Group")
+ggsave("plots/exploratoryplots/Dominant_v_Ammonia.png", width = 6, height =4)
+
+```
+
+
+```{r}
+ggplot(df_dominantsub, aes(x = Dominant, y = DissNitrateNitrite))+ geom_boxplot()+xlab("Dominant Algal Group")
+ggsave("plots/exploratoryplots/Dominant_v_NitrateNitrite.png", width = 6, height =4)
+```
+
+
+```{r}
+ggplot(df_dominantsub, aes(x = Dominant, y = log(DissOrthophos)))+ geom_boxplot()+xlab("Dominant Algal Group")
+ggsave("plots/exploratoryplots/Dominant_v_Orthophos.png", width = 6, height =4)
+```
+
+
+```{r}
+
+ggplot(df_dominantsub, aes(x = Dominant, y = log(Total_Inflow)))+ geom_boxplot()+xlab("Dominant Algal Group")
+ggsave("plots/exploratoryplots/Dominant_v_inflo.png", width = 6, height =4)
+```
+
+
+```{r}
+ggplot(df_dominantsub, aes(x = Dominant, y = log(Total_Inflow)))+ geom_boxplot()+
+  facet_wrap(~Region)+xlab("Dominant Algal Group")
+ggsave("plots/exploratoryplots/Dominant_v_inflow_byregion.png", width = 6, height =4)
+```
+
+
+```{r}
+ggplot(df_dominantsub, aes(x = Dominant, y = Clam_Turnover))+ geom_boxplot()+xlab("Dominant Algal Group")
+ggsave("plots/exploratoryplots/Dominant_v_clams.png", width = 6, height =4)
+```
+
+
+```{r}
+ggplot(df_dominantsub, aes(x = Dominant, y = Turbidity))+ geom_boxplot()+
+  facet_wrap(~Region)+xlab("Dominant Algal Group")
+ggsave("plots/exploratoryplots/Dominant_v_Turbidity_byregion.png", width = 6, height =4)
+ggplot(df_dominantsub, aes(x = Dominant, y = DissSilica))+ geom_boxplot()+xlab("Dominant Algal Group")
+ggsave("plots/exploratoryplots/Dominant_v_Silica.png", width = 6, height =4)
+
+ggplot(df_dominantsub, aes(x = Dominant, y = Salinity))+ geom_boxplot()+xlab("Dominant Algal Group")
+ggsave("plots/exploratoryplots/Dominant_v_Salinity.png", width = 6, height =4)
+
+ggplot(df_dominantsub, aes(x = Dominant, y = Temperature))+ geom_boxplot()+xlab("Dominant Algal Group")
+ggsave("plots/exploratoryplots/Dominant_v_Temp.png", width = 6, height =4)
+
+ggplot(df_dominantsub, aes(x = Dominant, y = log(Chlorophyll)))+ geom_boxplot()+
+  facet_wrap(~Region)+xlab("Dominant Algal Group")
+ggsave("plots/exploratoryplots/Dominant_v_Chl_byregion.png", width = 6, height =4)
+```
+
+
+```{r}
+ggplot(df_dominantsub, aes(x = Region, fill = Dominant)) + geom_bar()
+ggsave("plots/exploratoryplots/Dominant_v_Region.png", width = 6, height =4)
+
+ggplot(df_dominantsub, aes(x = Year, fill = Dominant)) + geom_bar(stat = "count")
+ggsave("plots/exploratoryplots/Dominant_v_Year.png", width = 6, height =4)
+
+ggplot(df_dominantsub, aes(x = Year, fill = Dominant)) + geom_bar(stat = "count")+
+  facet_wrap(~Region)
+ggsave("plots/exploratoryplots/Dominant_v_YearRegion.png", width = 6, height =4)
+
+ggplot(df_dominantsub, aes(x = Month, fill = Dominant)) + geom_bar(stat = "count")+
+  facet_wrap(~Region)
+ggsave("plots/exploratoryplots/Dominant_v_RegionMonth.png", width = 6, height =4)
+#You can see cyanobacteria take over in the south delta, which is good
+
+ggplot(df_dominantsub, aes(x = Month))+ geom_histogram() + facet_wrap(~Dominant)
+ggplot(df_dominantsub, aes(x = DissOrthophos))+ geom_histogram() + facet_wrap(~Dominant)
+ggplot(df_dominantsub, aes(x = Region))+ geom_histogram(stat = "count") + facet_wrap(~Dominant)
+ggplot(df_dominantsub, aes(x =Year))+ geom_histogram(stat = "count") + facet_wrap(~Dominant)
+#Huh, diatoms are actually more dominant recently than historically
+
+#Ugh, I still think we're going to need to calculate loadings 
+
+```
+
+
+## Impute NAs (optional)
+
+Next we'll impute missing data using a linear approximation. **If methods don't require a continuous, equally-spaced time series, this step is optional.** However, I like doing it (when feasible) to offset unbalanced design issues.
+
+If your data has non-detects, make sure to uniformly impute those values between (slightly larger than) 0 and the reporting limit.
+
+```{r}
+# df_monthly_imputed <- df_monthly_rm %>%
+#   arrange(Region, Date) %>%
+#   group_by(Region) %>%
+#   mutate(
+#     across(
+#       DissAmmonia:Total_Inflow,
+#       ~ is.na(.x),
+#       .names = 'imp_{.col}'
+#     ),
+#     across(
+#       DissAmmonia:Total_Inflow,
+#       ~ zoo::na.approx(.x, na.rm = FALSE),
+#       .names = '{.col}'
+#     )
+#   ) %>%
+#   ungroup()
+# 
+# values_long <- df_monthly_imputed %>%
+#   pivot_longer(
+#     cols = DissAmmonia:Total_Inflow,
+#     names_to = 'variable',
+#     values_to = 'value'
+#   )
+# 
+# flags_long <- df_monthly_imputed %>%
+#   pivot_longer(
+#     cols = starts_with('imp_'),
+#     names_to = 'flag_var',
+#     values_to = 'imp'
+#   ) %>%
+#   mutate(variable = sub('imp_', '', flag_var)) %>%
+#   select(Date, Region, variable, imp)
+# 
+# df_plot <- values_long %>%
+#   left_join(flags_long, by = c('Date', 'Region', 'variable'))
+# 
+# vars_imputed <- df_plot %>%
+#   group_by(variable) %>%
+#   summarise(any_imp = any(imp, na.rm = TRUE)) %>%
+#   filter(any_imp) %>%
+#   pull(variable)
+# 
+# regions <- unique(df_plot$Region)
+# 
+# for (r in regions) {
+#   p <- df_plot %>%
+#     filter(
+#       Region == r,
+#       variable %in% vars_imputed
+#     ) %>%
+#     ggplot(aes(Date, value)) +
+#       geom_line(color = 'gray40', linewidth = 0.5, na.rm = TRUE) +
+#       geom_point(aes(color = imp), size = 1.5, shape = 21, stroke = 0.8, na.rm = TRUE) +
+#       scale_color_manual(
+#         values = c('FALSE' = 'black', 'TRUE' = 'red'),
+#         labels = c('Observed', 'Imputed'),
+#         name = ''
+#       ) +
+#     labs(title = r) +
+#     facet_wrap(~ variable, scales = 'free', ncol = 2)
+# 
+#   print(p)
+# }
+# 
+# # clean dataframe
+# df_monthly_imputed <- df_monthly_imputed %>%
+#   select(-starts_with('imp_'))
+
+```
+
+### Full model
+
+Now we run the full model:
+
+```{r}
+library(sjmisc)
+library(sjPlot)
+library(nnet)
+#can also look at mclogit
+conflicts_prefer(nnet::multinom)
+
+df_dominant = mutate(df_dominant,
+                     log_Salinity = log(Salinity),
+                     log_inflow = log(Total_Inflow),
+                     log_Ammonia = log(DissAmmonia),
+                     log_Turbidity = log(Turbidity),
+                     log_Silica = log(DissSilica),
+                     logChlorophyll = log(Chlorophyll),
+                     logNitNit = log(DissNitrateNitrite))
+
+fit_multinom <- multinom(Dominant ~ Region+
+                           log_Salinity+
+                           log_Ammonia+
+                           log_Silica+
+                         logNitNit, data = df_dominant )
+
+summary(fit_multinom)
+tab_model(fit_multinom)
+#looks like Region is the only statistically significant thing.
+
+fit_multinom2 = multinom(Dominant ~ Region+
+                           log_inflow, data = df_dominant )
+
+summary(fit_multinom2)
+tab_model(fit_multinom2)
+
+plot(allEffects(fit_multinom2))
+
+```
+
+
+
+```{r}
+vcov(fit_multinom)
+```
+
+```{r}
+res <- residuals(fit_chl)
+
+df_res <- df_monthly_subset
+df_res$resid <- res
+
+regions <- unique(df_res$Region)
+n <- length(regions)
+
+for (r in regions) {
+  tmp <- df_res$resid[df_res$Region == r]
+  acf(tmp,
+      main = paste(r),
+      na.action = na.pass)
+}
+```
+
+```{r}
+infl <- check_outliers(fit_chl)
+infl
+
+plot(infl)
+```
+
+```{r}
+vif(fit_chl)
+```
+
+```{r}
+mf <- model.frame(fit_multinom)
+row_map <- as.numeric(rownames(mf))
+res <- residuals(fit_multinom)%>%
+  as.data.frame() 
+colnames(res) <- paste0('resid_', colnames(res))
+
+fitted = fitted(fit_multinom)%>%
+  as.data.frame() 
+colnames(fitted)<- paste0('fit_', colnames(fitted))
+
+df_resrow <- tibble(
+  row = row_map
+) %>%
+  bind_cols(res) %>%
+  bind_cols(fitted)
+
+df_res <- df_dominant %>%
+  mutate(row = row_number()) %>%
+  left_join(df_resrow, by = 'row') %>%
+  pivot_longer(cols = c(`resid_Centric Diatoms`:last_col()),
+               names_to = c("type","AlgalGroup"), names_sep = "_", values_to = "Value") %>%
+  pivot_wider(names_from = type, values_from = Value)
+
+
+```
+
+```{r}
+
+ggplot(df_res, aes(x = resid, y = fit))+geom_point()+
+  facet_wrap(~AlgalGroup)
+
+ggplot(df_res, aes(x = resid))+geom_histogram()+
+  facet_wrap(~AlgalGroup)
+
+```
+
+I have no idea what I am doing?
+
+
+```{r}
+
+coefs = summary(fit_multinom)$coefficients %>%
+  as.data.frame()
+
+coefs$AlgalGroup = row.names(coefs)
+
+SEcoefs = summary(fit_multinom)$standard.errors%>%
+  as.data.frame()
+SEcoefs$AlgalGroup = row.names(SEcoefs)
+
+allcoefs = pivot_longer(coefs, cols = c(`(Intercept)`:logNitNit),
+                        names_to = "Predictor", values_to = "Coef") %>%
+  left_join(
+    pivot_longer(SEcoefs, cols = c(`(Intercept)`:logNitNit),
+                        names_to = "Predictor", values_to = "SE")
+  )
+
+
+ggplot(allcoefs, aes(x = Predictor, y = Coef)) + geom_point()+ facet_wrap(~AlgalGroup, scales = "free_y")+
+  geom_errorbar(aes(ymin = Coef-SE, ymax = Coef+SE))+
+  theme(axis.text.x = element_text(angle = 45, hjust =1, vjust =1))
+  
+```
+ ### try with gams instead
+
+```{r gams}
+#build variance components - calculate salinity over region, between region, between regionand time, over region and time 
+library(mgcv)
+conflicts_prefer(mgcv::multinom)
+
+df_dominant2 = mutate(df_dominant, Dominant_n = as.integer(as.factor(Dominant))-1,
+          Ntotal = DissNitrateNitrite + DissAmmonia,
+                     log_Ntotal = log(DissNitrateNitrite + DissAmmonia))
+
+
+gam1 =  gam(formula = list(as.formula("Dominant_n~ s(log_Salinity)+s(log_inflow)"),
+                 as.formula("~ s(log_Salinity)+s(log_inflow)"),
+                 as.formula("~ s(log_Salinity)+s(log_inflow)"),
+                 as.formula("~ s(log_Salinity)+s(log_inflow)")),
+                 
+                 family = mgcv::multinom(K=4), data = df_dominant2 )
+
+summary(gam1)
+plot(gam1)
+gam.check(gam1)
+library(DHARMa)
+plot(simulateResiduals(gam1))
+testDispersion(gam1)
+fit = getFitted(gam1)
+
+#test uniformity, dispersions, outliers. 
+
+gam2 =  gam(formula = list(as.formula("Dominant_n~ s(log_Salinity)+s(log_inflow, by = Region)"),
+                 as.formula("~ s(log_Salinity)+s(log_inflow, by = Region)"),
+                 as.formula("~ s(log_Salinity)+s(log_inflow, by = Region)"),
+                 as.formula("~ s(log_Salinity)+s(log_inflow, by = Region)")),
+                 
+                 family = multinom(K=4), data = df_dominant2 )
+
+summary(gam2)
+plot(gam2, se = F, scale =0)
+gam.check(gam2)
+```
+### better plot of predicted outcomes
+
+```{r outcomeplot}
+newdat = data.frame(log_inflow = seq(11.5, 15.5, by = 0.1)) %>%
+  merge(data.frame(log_Salinity = seq(-3, 3, by = 0.1))) %>%
+  merge(data.frame(Region = unique(df_dominant$Region)))
+
+newdat_wpreds = bind_cols(newdat, as.data.frame(predict(gam2, newdata = newdat, type = "response"))) %>%
+  rename(`Centric Diatoms`= V1, Cryptophytes = V2, Cyanobacteria = V3, `Green Algae` = V4, `Pennate Diatoms` = V5) %>%
+  pivot_longer(cols = c(`Centric Diatoms`:`Pennate Diatoms`), names_to = "AlgalGroup", values_to = "Probability")
+
+ggplot(newdat_wpreds, aes(x = log_Salinity, y = Probability, color = AlgalGroup)) + geom_smooth()
+
+ggplot(newdat_wpreds, aes(x = log_inflow, y = Probability, color = AlgalGroup)) + geom_smooth()+
+  facet_wrap(~Region)
+
+```
+## wide format
+
+Try this a different way.
+
+Note: this isn't working, try again later
+
+```{r wideformat}
+conflicts_prefer()
+
+df_monthly2 = mutate(df_monthly, GreenAlgae = round(`bv_Green Algae`),
+                     Cyanos = round(`bv_Cyanobacteria`), CD = round(`bv_Centric Diatoms`),
+                     PD = round(`bv_Pennate Diatoms`), Crypto = round(`bv_Cryptophytes`),
+                     log_Salinity = log(Salinity), log_inflow = log(Total_Inflow))  %>%
+  filter(!is.na(Salinity), !is.na(Total_Inflow), !is.na(GreenAlgae))
+
+Response = as.matrix(select(df_monthly2, GreenAlgae, Cyanos, CD, PD, Crypto))
+gam_wide =  gam(formula = list(as.formula("as.matrix(bind_cols(GreenAlgae, Cyanos, CD))~ s(log_Salinity)+s(log_inflow)"),
+                 as.formula("~ s(log_Salinity)+s(log_inflow)"),
+                 as.formula("~ s(log_Salinity)+s(log_inflow)"),
+                 as.formula("~ s(log_Salinity)+s(log_inflow)")),
+                 
+                 family = mgcv::multinom(K=4), data = df_monthly2 )
+
+
+```
+
+### Variance decomposition
+
+
+```{r variancedecomp}
+region_time_vars = c("logNitNit", "log_Ammonia", "log_Silica", "logChlorophyll", "log_inflow", "Temperature",
+                     "log_Salinity", "log_Ntotal")
+
+# region_time_bw <- df_dominant2 %>%
+#   group_by(Region) %>% # group by region
+#   summarize(
+#     across(
+#       all_of(region_time_vars),
+#       ~ mean(.x, na.rm = TRUE), # mean per analyte per region
+#       .names = '{.col}_bw_region' # name this "bw_region"
+#     ),
+#     .groups = 'drop'
+#   )
+
+time_bw <- df_dominant2 %>%
+  group_by(Region) %>% # group by region
+  summarize(
+    across(
+      all_of(region_time_vars),
+      ~ mean(.x, na.rm = TRUE), # mean per analyte per region
+      .names = '{.col}_RegionalMean' # name this "bw_MonthYear"
+    ),
+    .groups = 'drop'
+  )
+
+
+# join to the df
+df_dominant3 <- df_dominant2 %>%
+  left_join(time_bw, by = 'Region')
+
+# calculate over time differences (d_rt = X_rt - mean(X_r))
+#I think i don't need the "bw_region" ones because they are already reginoal means
+#but I do because this is the mean across TIME!!!
+for (v in region_time_vars) {
+  df_dominant3[[paste0(v, '_diffFromMean')]] <-
+    df_dominant3[[v]] - df_dominant3[[paste0(v, '_RegionalMean')]] 
+}
+
+
+gam3 =  gam(formula = list(as.formula("Dominant_n~ s(log_inflow) + s(logNitNit_diffFromMean, k=4)+logNitNit_RegionalMean"),
+                 as.formula("~ s(log_inflow) + s(logNitNit_diffFromMean, k=4)+logNitNit_RegionalMean"),
+                 as.formula("~  s(log_inflow) + s(logNitNit_diffFromMean, k=4)+logNitNit_RegionalMean"),
+                 as.formula("~  s(log_inflow) + s(logNitNit_diffFromMean, k=4)+logNitNit_RegionalMean")),
+                 
+                 family = multinom(K=4), data = df_dominant3 )
+
+summary(gam3)
+plot(gam3, se = F, scale =0)
+gam.check(gam3)
+
+
+newdat =data.frame(logNitNit_diffFromMean = seq(-1.3, 1.5, by = .2)) %>%
+          merge(data.frame(logNitNit_RegionalMean = unique(df_dominant3$logNitNit_RegionalMean))) %>%
+  merge(data.frame(log_inflow = seq(11.5, 15.5, by = 0.2)))
+        
+
+newdat_wpreds3 = bind_cols(newdat, as.data.frame(predict(gam3, newdata = newdat, type = "response"))) %>%
+  rename(`Centric Diatoms`= V1, Cryptophytes = V2, Cyanobacteria = V3, `Green Algae` = V4, `Pennate Diatoms` = V5) %>%
+  pivot_longer(cols = c(`Centric Diatoms`:`Pennate Diatoms`), names_to = "AlgalGroup", values_to = "Probability")
+
+ggplot(newdat_wpreds3, aes(x = logNitNit_diffFromMean, y = Probability, color = AlgalGroup)) + geom_smooth()
+ggplot(newdat_wpreds3, aes(x = as.factor(logNitNit_RegionalMean), y = Probability, color = AlgalGroup)) + geom_boxplot()
+
+ggplot(newdat_wpreds3, aes(x = log_inflow, y = Probability, color = AlgalGroup)) + geom_smooth()
+ggplot(newdat_wpreds3, aes(x = Region, y = Probability, color = AlgalGroup)) + geom_boxplot()
+```
+
+
+```{r variancedecomp2}
+gam4 =  gam(formula = list(Dominant_n~ s(log_inflow) + s(logNitNit_diffFromMean, k=4)+logNitNit_RegionalMean + s(Region, bs = 're'),
+                 ~ s(log_inflow) + s(logNitNit_diffFromMean, k=4)+logNitNit_RegionalMean+ s(Region, bs = 're'),
+                 ~  s(log_inflow) + s(logNitNit_diffFromMean, k=4)+logNitNit_RegionalMean+ s(Region, bs = 're'),
+                 ~  s(log_inflow) + s(logNitNit_diffFromMean, k=4)+logNitNit_RegionalMean+ s(Region, bs = 're')),
+                 
+                 family = multinom(K=4), data = df_dominant3 )
+
+summary(gam4)
+
+AIC(gam3)
+AIC(gam4)
+```
+
+Now with total nitrogen
+
+```{r}
+gam5 =  gam(formula = list(Dominant_n~ s(log_inflow) + s(log_Ntotal_diffFromMean, k=4)+log_Ntotal_RegionalMean + s(Region, bs = 're'),
+                 ~ s(log_inflow) + s(log_Ntotal_diffFromMean, k=4)+log_Ntotal_RegionalMean+ s(Region, bs = 're'),
+                 ~  s(log_inflow) + s(log_Ntotal_diffFromMean, k=4)+log_Ntotal_RegionalMean+ s(Region, bs = 're'),
+                 ~  s(log_inflow) + s(log_Ntotal_diffFromMean, k=4)+log_Ntotal_RegionalMean+ s(Region, bs = 're')),
+                 
+                 family = multinom(K=4), data = df_dominant3 )
+
+summary(gam5)
+
+AIC(gam3, gam4, gam5)
+#why is Ntotal and DissNinit the same??
+
+summary(df_dominant3$log_Ntotal)
+summary(df_dominant3$logNitNit)
+
+ggplot(df_dominant3, aes(x = logNitNit, y = log_Ntotal)) + geom_point()
+
+ggsave("plots/exploratoryplots/NitrateNItrite_v_totalN.png", width =8, height =6)
+
+```
+
+
+
+## LMM - DissAmmonia
+
+Since SEMs ideally have at least two "sub models", I'll throw together a quick model for DissolvedAmmonia. I didn't bother with intense model diagnostics here, but they should definitely be done for real models.
+
+
+```{r}
+df_dominant = mutate(df_dominant, logInflow = log(Total_Inflow))
+
+fit_amm <- lmer(
+  log_Ammonia ~
+    Temperature +
+    logInflow+
+    (1|Region),
+  data = df_dominant,
+  na.action = na.omit
+)
+
+summary(fit_amm)
+plot(fit_amm)
+```
+
+# SEMs
+
+## Linear Mixed Effects Model
+
+### Piecewise
+
+Now we can fit our models into an SEM. Since they're both LMMs, we have to use piecewiseSEM.
+
+Except psem doesn't accept multinomial models. Shucks.
+
+But it does take gams, and mgcv has a multinomial optino. Maybe I do that!
+
+```{r}
+
+
+psem_out <- psem(fit_multinom, fit_amm, data = df_dominant)
+summary(psem_out, standardize = 'scale')
+```
+
+There seems to be a bug, since it says it can't test things that show up in the subsequent dataframes. Nevertheless, we note:
+
+-   AIC: this is only meaningful compared to other models (with the same RE structure)
+    -   (relatively) smaller the better
+-   Chi-squared (Goodness of Fit): not significant, which means our model fits the observed data well
+-   Fisher's C: significant, there's some missing paths in our causal structure
+    -   we can look at the independence claims (first df) to see which (eg. log_DissAmmonia and log_Salinity)
+-   the second dataframe gives the coefficients (standardized)
+-   the third dataframe gives the $R^2$ values
+    -   marginal are without the random effects while the conditional ones are
+
+Also note that the coefficients can be interpreted (1 SD change in x corresponds to $\beta$ SD change in y, conditional on other variables) *except* for the three Temperature ones. Together, they define a nonlinear chl–temperature curve, which is not constant (but can be graphed).
+
+## Linear Fixed Effects Model
+
+### Piecewise
+
+For comparison, we can run the same model without the random effect; this makes it comparable to traditional SEM.
+
+```{r}
+fit_chl <- lm(
+  log_Chlorophyll ~
+    log_Salinity +
+    log_DissAmmonia +
+    log_DissOrthophos +
+    log_Turbidity +
+    lag_logChlorophyll +
+    Temp1 +
+    Temp2 +
+    Temp3,
+  data = df_monthly_subset)
+
+fit_amm <- lm(
+  log_DissAmmonia ~
+    lag_logDissAmmonia +
+    Temp1 +
+    log_DissOrthophos +
+    log_Turbidity,
+    data = df_monthly_subset)
+
+psem_out <- psem(fit_chl, fit_amm, data = df_monthly_subset)
+summary(psem_out, standardize = 'scale')
+```
+
+### Traditional
+
+```{r}
+model <- '
+    log_Chlorophyll ~ log_Salinity +
+    log_DissAmmonia +
+    log_DissOrthophos +
+    log_Turbidity +
+    lag_logChlorophyll +
+    Temp1 +
+    Temp2 +
+    Temp3
+
+    log_DissAmmonia ~ lag_logDissAmmonia +
+    Temp1 +
+    log_DissOrthophos +
+    log_Turbidity
+'
+
+fit <- sem(model, data = df_monthly_subset)
+
+summary(fit, fit.measures = TRUE, standardized = TRUE)
+
+modindices(fit, sort = TRUE)
+```
+
+We note that the coefficients are very similar; the main difference is in interpretation. Here, the high RMSEA, especially, points to missing structural paths (as does the somewhat low TLI). By looking at the modification indices, we see that (similar to the d-separation tests from psem) a log_DissAmmonia \~ log_Salinity link is likely missing.
+
+Note that traditional SEM can also evaluate residual covariance *between response variables*, while psem cannot (the log_Chlorophyll \~\~ log_DissAmmonia row in the MI table).
+
+Also note that, if we include latent variables, we *must* use traditional SEM. See the `stats examples` SEM file for that code.
+
+#### Traditional: Plot
+
+We can also plot traditional SEMs, just for fun:
+
+```{r}
+semPaths(
+  fit,
+  what = 'std',
+  whatLabels = 'std',
+  layout = 'tree2',
+  nCharNodes = 5,
+  edge.label.cex = 1.1,
+  sizeMan = 5,
+  edge.width = 1,
+  esize = 1,
+  residuals = FALSE,
+  mar = c(7, 7, 7, 7)
+)
+```
+
+## General Additive Model (GAM)
+
+Piecewise SEMs can also handle GAMs, which are another type of linear model. The advantage is how they handle non-linear relationships.
+
+In the previous models, we identified the relationship between Chlorophyll and Temperature as non-linear, so we added polynomial basis functions to our formulas. GAMs essentially do the exact same thing but use splines instead, which are more sophisticated.
+
+(I won't go into model diagnostics for GAMs here.)
+
+#### LMM-like GAM
+
+We can essentially re-create the LMM model by switching out the Temperature terms for a smooth function and keeping the others as linear predictors:
+
+```{r}
+# default basis spline = thin plate
+gam_chl <- gam(
+  log_Chlorophyll ~
+    log_Salinity +
+    log_DissAmmonia +
+    log_DissOrthophos +
+    log_Turbidity +
+    lag_logChlorophyll +
+    s(Temperature, k = 6) +
+    s(Region, bs = 're'), # random effect (ridge penalty)
+  data = df_monthly_subset,
+  method = 'REML'
+)
+
+gam_amm <- gam(
+  log_DissAmmonia ~
+    lag_logDissAmmonia +
+    log_Turbidity +
+    s(Temperature, k = 6) +
+    s(Region, bs = 're'),
+  data = df_monthly_subset,
+  method = 'REML'
+)
+
+psem_gam <- psem(gam_chl, gam_amm, data = df_monthly_subset)
+summary(psem_gam, standardize = 'scale')
+```
+
+Our results are very similar, which makes sense:
+
+-   $R^2$ values are almost the same (though the GAM is slightly better)
+
+-   linear coefficient and p-values are almost the same
+
+However, the big difference is that Temperature is now included as a smooth function instead of multiple polynomial terms. This changes the shape of its partial effect curve:
+
+```{r}
+df_temp_plt <- df_monthly_subset %>%
+  mutate(
+    poly_temp = poly(Temperature, 3)
+  )
+
+fit_chl <- lmer(
+  log_Chlorophyll ~
+    log_Salinity +
+    log_DissAmmonia +
+    log_DissOrthophos +
+    log_Turbidity +
+    lag_logChlorophyll +
+    Temp1 +
+    Temp2 +
+    Temp3 +
+    (1|Region),
+  data = df_temp_plt
+)
+
+poly_obj <- attr(df_temp_plt$poly_temp, 'coefs')
+
+temp_seq <- seq(
+  min(df_monthly_subset$Temperature, na.rm = TRUE),
+  max(df_monthly_subset$Temperature, na.rm = TRUE),
+  length.out = 300
+)
+
+new_poly <- poly(temp_seq, degree = 3, coefs = poly_obj)
+
+new_dat <- data.frame(
+  log_Salinity = mean(df_monthly_subset$log_Salinity, na.rm = TRUE),
+  log_DissAmmonia = mean(df_monthly_subset$log_DissAmmonia, na.rm = TRUE),
+  log_DissOrthophos = mean(df_monthly_subset$log_DissOrthophos, na.rm = TRUE),
+  log_Turbidity = mean(df_monthly_subset$log_Turbidity, na.rm = TRUE),
+  lag_logChlorophyll = mean(df_monthly_subset$lag_logChlorophyll, na.rm = TRUE),
+  Temp1 = new_poly[,1],
+  Temp2 = new_poly[,2],
+  Temp3 = new_poly[,3]
+)
+
+new_dat$partial <- predict(fit_chl, newdata = new_dat, re.form = NA)
+
+new_dat$partial_centered <- new_dat$partial - mean(new_dat$partial)
+
+ggplot(new_dat, aes(x = temp_seq, y = partial_centered)) +
+  geom_line() +
+  labs(
+    x = 'Temperature',
+    y = 'Partial Effect',
+  )
+```
+
+```{r}
+plot(gam_chl, select = 1)
+```
+
+They're similar, but the GAM function is more flexible (it also more closely fits our original log_Chlorophyll \~ Temperature plot; this makes sense if Temperature is an influential predictor). We also note that our chi-square goodness of fit test is now significant, meaning this model (with a more correctly modeled Temperature) is a poorer fit, possibly due to missing variables.
+
+This all being said, for practical purposes, the LMM gives us a similar overall picture to the GAM; both are valid *if you correctly specify the model structure.*
+
+### All Smooths
+
+You could also make all variables smooth terms if you suspect other relationships may be non-linear (though for truly linear relationships it's better not to).
+
+```{r}
+gam_chl <- gam(
+  log_Chlorophyll ~
+    s(log_Salinity, k = 6) +
+    s(log_DissAmmonia, k = 6) +
+    s(log_DissOrthophos, k = 6) +
+    s(log_Turbidity, k = 6) +
+    s(lag_logChlorophyll, k = 6) +
+    s(Temperature, k = 6) +
+    s(Region, bs = 're'),
+  data = df_monthly_subset,
+  method = 'REML'
+)
+
+gam_amm <- gam(
+  log_DissAmmonia ~
+    s(lag_logDissAmmonia, k = 6) +
+    s(log_Turbidity, k = 6) +
+    s(Temperature, k = 6) +
+    s(Region, bs = 're'),
+  data = df_monthly_subset,
+  method = 'REML'
+)
+
+psem_gam <- psem(gam_chl, gam_amm, data = df_monthly_subset)
+summary(psem_gam, standardize = 'scale')
+```
+
+Our $R^2$ improved, though our interpretations of significance didn't change much, which makes sense. The biggest advantage is that, by examining the individual GAMs, we can visualize/interpret any underlying non-linear relationships in a way that LMMs can't.
+
+
+# Export for other explorations
+```{r}
+# saveRDS(df_monthly_subset, 'data/examples/draft_monthly_data.rds')
+```
