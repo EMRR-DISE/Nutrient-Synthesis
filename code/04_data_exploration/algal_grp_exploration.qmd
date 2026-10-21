@@ -1,0 +1,216 @@
+---
+title: "Algal Group Exploration"
+author: "Dave Bosworth"
+date: today
+date-format: long
+format:
+  html:
+    toc: true
+    toc-expand: 2
+    code-fold: true
+    code-tools: true
+    code-copy: false
+execute:
+  message: false
+  warning: false
+---
+
+# Purpose
+
+Explore Algal Group trends for the DWR nutrient synthesis project.
+
+# Global Code
+
+```{r}
+# Load packages
+library(tidyverse)
+library(khroma)
+library(scales)
+library(here)
+```
+
+# Monthly Data
+
+## Prepare Data
+
+```{r}
+df_monthly <- readRDS(here("data/processed/monthly_values.rds"))
+
+df_monthly_c <- df_monthly |>
+  mutate(
+    Date = make_date(year = Year, month = Month),
+    Region = factor(
+      Region,
+      levels = c(
+        "North",
+        "Confluence",
+        "SouthCentral",
+        "Suisun Marsh",
+        "Suisun Bay"
+      )
+    )
+  ) |>
+  select(Date, Region, starts_with("bv_")) |>
+  pivot_longer(
+    cols = starts_with("bv_"),
+    names_to = "Algal_Group",
+    values_to = "Biovolume",
+    values_drop_na = TRUE
+  ) |>
+  mutate(Algal_Group = str_remove(Algal_Group, "^bv_"))
+```
+
+## Time-series Plots
+
+```{r}
+plt_base_monthly <- df_monthly_c |>
+  ggplot(aes(x = Date, y = Biovolume, fill = Algal_Group)) +
+  scale_fill_muted(name = "Algal Group") +
+  scale_x_date(
+    name = "Date",
+    breaks = breaks_pretty(10),
+    expand = expansion(mult = 0.003)
+  ) +
+  theme_bw() +
+  theme(legend.position = "top") +
+  guides(fill = guide_legend(nrow = 1))
+```
+
+### Stacked Bar Plots, fixed scale
+
+```{r}
+#| fig-width: 9
+#| fig-height: 9.5
+
+plt_base_monthly +
+  geom_col() +
+  facet_wrap(vars(Region), ncol = 1)
+```
+
+### Stacked Bar Plots, free scales
+
+```{r}
+#| fig-width: 9
+#| fig-height: 9.5
+
+plt_base_monthly +
+  geom_col() +
+  facet_wrap(vars(Region), ncol = 1, scales = "free_y")
+```
+
+### Proportional Bar Plots
+
+```{r}
+#| fig-width: 9
+#| fig-height: 9.5
+
+plt_base_monthly +
+  geom_col(position = "fill") +
+  facet_wrap(vars(Region), ncol = 1) +
+  scale_y_continuous(
+    name = "Proportion of Biovolume",
+    labels = label_percent(),
+    expand = expansion(mult = 0.02)
+  )
+```
+
+# Seasonal Data
+
+## Prepare Data
+
+```{r}
+df_seasonal <- readRDS(here("data/processed/seasonal_values.rds"))
+
+df_seasonal_c <- df_seasonal |>
+  mutate(
+    Region = factor(
+      Region,
+      levels = c(
+        "North",
+        "Confluence",
+        "SouthCentral",
+        "Suisun Marsh",
+        "Suisun Bay"
+      )
+    )
+  ) |>
+  select(YearAdj, Season, Region, starts_with("bv_")) |>
+  pivot_longer(
+    cols = starts_with("bv_"),
+    names_to = "Algal_Group",
+    values_to = "Biovolume",
+    values_drop_na = TRUE
+  ) |>
+  mutate(Algal_Group = str_remove(Algal_Group, "^bv_"))
+```
+
+## Time-series Plots
+
+```{r}
+plt_base_seasonal <- df_seasonal_c |>
+  ggplot(aes(x = YearAdj, y = Biovolume, fill = Algal_Group)) +
+  scale_fill_muted(name = "Algal Group") +
+  scale_x_continuous(
+    name = "Adjusted Year",
+    breaks = breaks_pretty(6),
+    expand = expansion(mult = 0.02)
+  ) +
+  theme_bw() +
+  theme(
+    legend.position = "top",
+    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)
+  ) +
+  guides(fill = guide_legend(nrow = 1))
+```
+
+### Stacked Bar Plots, fixed scale
+
+```{r}
+#| fig-width: 9
+#| fig-height: 9
+
+plt_base_seasonal +
+  geom_col() +
+  facet_grid(rows = vars(Region), cols = vars(Season))
+```
+
+### Stacked Bar Plots, free scales
+
+```{r}
+#| fig-width: 9
+#| fig-height: 9
+
+plt_base_seasonal +
+  geom_col() +
+  facet_grid(rows = vars(Region), cols = vars(Season), scales = "free_y")
+```
+
+```{r}
+#| fig-width: 10
+#| fig-height: 9
+
+plt_base_seasonal +
+  geom_col() +
+  facet_wrap(
+    vars(Region, Season),
+    ncol = 4,
+    scales = "free_y",
+    labeller = labeller(.multi_line = FALSE)
+  )
+```
+
+### Proportional Bar Plots
+
+```{r}
+#| fig-width: 9
+#| fig-height: 9
+
+plt_base_seasonal +
+  geom_col(position = "fill") +
+  facet_grid(rows = vars(Region), cols = vars(Season)) +
+  scale_y_continuous(
+    name = "Proportion of Biovolume",
+    labels = label_percent(),
+    expand = expansion(mult = 0.02)
+  )
+```

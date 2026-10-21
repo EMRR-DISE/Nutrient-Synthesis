@@ -1,0 +1,208 @@
+---
+title: "Model Data - Sampling Effort"
+author: "Dave Bosworth"
+date: today
+date-format: long
+format:
+  html:
+    toc: true
+    toc-expand: 3
+    code-fold: true
+    code-tools: true
+    code-copy: false
+execute:
+  message: false
+  warning: false
+---
+
+# Purpose
+
+Investigate sampling effort for model input data used in the DWR nutrient synthesis project. This page explores sampling effort for both the DWR integrated discrete nutrient data set and the integrated discrete water quality data from [discretewq](https://github.com/InteragencyEcologicalProgram/discretewq).
+
+# Global Code
+
+```{r}
+# Load packages
+library(tidyverse)
+library(scales)
+library(here)
+library(conflicted)
+
+# Declare package conflict preferences
+conflicts_prefer(dplyr::filter())
+
+# Load global functions
+source(here("code/01_functions/global_funcs.R"))
+```
+
+# Import and Prepare Data
+
+```{r}
+# Load data retrieval and processing function for DWR integrated discrete nutrient data
+source(here("code/02_data_retrieval_processing/dwr_nutrients.R"))
+nutr <- get_nutrients()
+
+# Load data retrieval and processing function for integrated water quality data set from discretewq
+source(here("code/02_data_retrieval_processing/discretewq.R"))
+dwq <- get_discretewq()
+
+# Count number of samples for each Year, Month, Region, and Parameter
+ls_count_month <-
+  list(
+    nutr = nutr,
+    dwq = dwq |>
+      mutate(
+        Parameter = replace_values(
+          Parameter,
+          "DissolvedOxygen" ~ "DO",
+          "DissSilica" ~ "Dissolved Silica"
+        )
+      )
+  ) |>
+  map(\(x) count(x, Year, Month, Region, Parameter, name = "Num_samples"))
+
+# Further summarize number of samples for each Year, Season, Region, and Parameter using
+# Adjusted calendar year: December-November, with December of the previous calendar year included
+# with the following year
+ls_count_season <- ls_count_month |>
+  map(
+    \(x) {
+      mutate(
+        x,
+        YearAdj = assign_year_adj(Month, Year),
+        Season = assign_season(Month)
+      ) |>
+        summarize(
+          Num_samples = sum(Num_samples),
+          .by = c(YearAdj, Season, Region, Parameter)
+        )
+    }
+  )
+```
+
+# Sampling Effort Plots
+
+```{r}
+# Monthly values
+ls_count_month_plt <- ls_count_month |>
+  map(
+    \(x) {
+      filter(x, Year %in% 2010:2024) |>
+        mutate(Month = month(Month, label = TRUE)) |>
+        complete(nesting(Year, Month), Region, Parameter) |>
+        nest(.by = Parameter) |>
+        deframe() |>
+        imap(
+          \(x, idx) {
+            ggplot(data = x, aes(x = Year, y = Region, fill = Num_samples)) +
+              geom_tile() +
+              facet_wrap(vars(Month)) +
+              ggtitle(idx) +
+              scale_y_discrete(drop = FALSE) +
+              scale_x_continuous(
+                breaks = breaks_pretty(10),
+                expand = expansion(mult = 0.02)
+              ) +
+              scale_fill_viridis_c(
+                name = "Number of\nSamples",
+                na.value = "transparent"
+              ) +
+              theme_bw() +
+              theme(
+                axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)
+              )
+          }
+        )
+    }
+  )
+```
+
+```{r}
+# Seasonal values
+ls_count_season_plt <- ls_count_season |>
+  map(
+    \(x) {
+      filter(x, YearAdj %in% 2010:2024) |>
+        ggplot(aes(x = YearAdj, y = Region, fill = Num_samples)) +
+        geom_tile() +
+        facet_grid(
+          rows = vars(Parameter),
+          cols = vars(Season),
+          labeller = label_wrap_gen(width = 20)
+        ) +
+        scale_x_continuous(
+          breaks = breaks_pretty(10),
+          expand = expansion(mult = 0.02)
+        ) +
+        scale_fill_viridis_c(name = "Number of\nSamples") +
+        theme_bw() +
+        theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+    }
+  )
+```
+
+## DWR Integrated Discrete Nutrient Data
+
+### Monthly Values
+
+::: {.panel-tabset}
+
+```{r}
+#| echo: false
+#| results: asis
+#| fig-width: 8
+#| fig-height: 6
+
+nutr_mo_plts <- ls_count_month_plt$nutr
+for (i in 1:length(nutr_mo_plts)) {
+  # Create subheadings for each Parameter
+  cat("#### ", names(nutr_mo_plts[i]), "\n\n")
+  # Print plot
+  print(nutr_mo_plts[[i]])
+  cat("\n\n")
+}
+```
+
+:::
+
+### Seasonal Values
+
+```{r}
+#| fig-width: 8
+#| fig-height: 9
+
+ls_count_season_plt$nutr
+```
+
+## Integrated Discrete WQ Data from discretewq
+
+### Monthly Values
+
+::: {.panel-tabset}
+
+```{r}
+#| echo: false
+#| results: asis
+#| fig-width: 8
+#| fig-height: 6
+
+dwq_mo_plts <- ls_count_month_plt$dwq
+for (i in 1:length(dwq_mo_plts)) {
+  # Create subheadings for each Parameter
+  cat("#### ", names(dwq_mo_plts[i]), "\n\n")
+  # Print plot
+  print(dwq_mo_plts[[i]])
+  cat("\n\n")
+}
+```
+
+:::
+
+### Seasonal Values
+
+```{r}
+#| fig-width: 8
+#| fig-height: 9
+
+ls_count_season_plt$dwq
+```

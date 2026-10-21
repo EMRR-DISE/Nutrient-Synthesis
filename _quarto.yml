@@ -3,8 +3,9 @@ project:
   output-dir: docs
   render:
     - index.qmd
-    - code/data_integration/process_data_for_models.qmd
-    - code/analysis/sem_template.qmd
+    - code/04_data_exploration/data_sampling_effort.qmd
+    - code/06_analysis/sem_template.qmd
+    - code/04_data_exploration/algal_grp_exploration.qmd
 
 website:
   title: "DWR Nutrient Synthesis"

@@ -4,8 +4,12 @@ title: "DWR Nutrient Synthesis"
 
 Data Processing:
 
-* [Preparing Data for Models](code/data_integration/process_data_for_models.qmd)
+* [Sampling Effort for Model Data](code/04_data_exploration/data_sampling_effort.qmd)
+
+Data Exploration:
+
+* [Algal Group Exploration](code/04_data_exploration/algal_grp_exploration.qmd)
 
 Model Results:
 
-* [SEM Template](code/analysis/sem_template.qmd)
+* [SEM Template](code/06_analysis/sem_template.qmd)

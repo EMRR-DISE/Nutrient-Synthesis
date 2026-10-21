@@ -55,7 +55,6 @@ conflicts_prefer(dplyr::filter(), dplyr::lag(), lme4::lmer())
 # Define WQ parameters included in this example
 wq_param <- c(
   "DissAmmonia",
-  "DissNitrate",
   "DissNitrateNitrite",
   "DissOrthophos",
   "DON",
@@ -67,7 +66,7 @@ wq_param <- c(
   "DissolvedOxygen",
   "Chlorophyll",
   "pH",
-  "Microcystis",
+  "MVI",
   "Sac_Inflow",
   "SJR_Inflow",
   "Total_Inflow"
@@ -118,8 +117,6 @@ There are missing values for certain analytes. To group them:
 
 **missing data (Suisun Marsh):** DissAmmonia, DissNitrateNitrite, DissOrthophos, DON, TKN, TotPhos
 
-**missing a lot of data:** DissNitrate
-
 We can break this down by month to see if the missing data is interpolable or not:
 
 ```{r}
@@ -169,8 +166,6 @@ Findings:
 
 -   rest of missing data is interpolable
 
-**Lots of missing data:** DissNitrate
-
 **Large gaps until 06-2015:** MVI
 
 -   all 5 month gaps between Jan-May
@@ -209,15 +204,13 @@ pH is missing data after 01-2023 for two regions; this feels like an error to me
 
 MVI has multiple data gaps and some large, non-interpolable gaps. Options are similar to above. We also have chlorophyll data as a response variable to ground truth our results if analyses look off with MVI.
 
-DissNitrate is missing large amounts of data and should be excluded.
-
 ## Visualize distributions
 
 Next, I'm removing columns I won't be using for simplicity.
 
 ```{r}
 df_monthly_rm <- df_monthly %>%
-  select(-c(DissNitrate, DON, SJR_Inflow, Sac_Inflow, TKN, TotPhos))
+  select(-c(DON, SJR_Inflow, Sac_Inflow, TKN, TotPhos))
 ```
 
 Now I look at the shape of variable distributions to get a sense of what the data looks like.
