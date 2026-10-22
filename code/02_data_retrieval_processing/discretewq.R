@@ -9,10 +9,11 @@
 get_discretewq <- function() {
   # Import Data -------------------------------------------------------------------------------
 
+  # Target commit check (Informational / Defensive)
   # Make sure we are using `discretewq` version 2.4.0.9000,
   # commit b68425c2eca88015b5e01ae6029f84b2a3af2ea8
   discretewq_ref_target <- "b68425c"
-  pak_pkg <- paste0(
+  repo_target <- paste0(
     "InteragencyEcologicalProgram/discretewq@",
     discretewq_ref_target
   )
@@ -23,17 +24,30 @@ get_discretewq <- function() {
       dependencies = FALSE
     )$source
 
-    discretewq_ref <- stringr::str_sub(
-      discretewq_src,
-      start = stringr::str_locate(discretewq_src, "@")[1] + 1,
-      end = stringr::str_locate(discretewq_src, "@")[1] + 7
-    )
+    # Extract commit hash if installed via remotes/pak
+    discretewq_ref <- if (stringr::str_detect(discretewq_src, "@")) {
+      stringr::str_sub(
+        discretewq_src,
+        start = stringr::str_locate(discretewq_src, "@")[1] + 1,
+        end = stringr::str_locate(discretewq_src, "@")[1] + 7
+      )
+    } else {
+      NA_character_
+    }
 
     if (is.na(discretewq_ref) || discretewq_ref != discretewq_ref_target) {
-      pak::pak(pak_pkg)
+      cli::cli_abort(c(
+        "x" = "Installed {.pkg discretewq} version ({.val {discretewq_ref}}) does not match target commit {.val {discretewq_ref_target}}.",
+        "i" = "To fix this, run the following command in your console:",
+        " " = "{.code remotes::install_github('{repo_target}')}"
+      ))
     }
   } else {
-    pak::pak(pak_pkg)
+    cli::cli_abort(c(
+      "x" = "Package {.pkg discretewq} is required but not installed.",
+      "i" = "Please install commit {.val {discretewq_ref_target}} using:",
+      " " = "{.code remotes::install_github('{repo_target}')}"
+    ))
   }
 
   # Import integrated data set from discretewq

@@ -48,3 +48,6 @@ rsconnect/
 # Quarto files
 /.quarto/
 **/*.quarto_ipynb
+
+# Exclude targets cache and data store
+_targets/
